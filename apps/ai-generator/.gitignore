@@ -1,0 +1,13 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+
+# Rider / VS
+.vs/
+.idea/
+*.user
+*.suo
+
+# Env files
+.env
+!.env.example

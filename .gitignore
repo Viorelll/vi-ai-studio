@@ -55,3 +55,12 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Playwright MCP output (screenshots, snapshots, console logs from
+# agent-driven browser testing -- not project content)
+.playwright-mcp/
+
+# Node (apps/web has its own .gitignore for its build output, but a
+# monorepo-wide node_modules/coverage rule is cheap insurance)
+node_modules/
+coverage/

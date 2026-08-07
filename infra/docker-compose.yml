@@ -1,0 +1,93 @@
+# Explicit project name -- see docker-compose.dev.yml for why this matters
+# (this directory shares its basename "infra" with vi-med-filler's).
+name: vi-ai-studio
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: viaistudio
+      POSTGRES_USER: viaistudio
+      POSTGRES_PASSWORD: viaistudio
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U viaistudio"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ai-generator:
+    build:
+      context: ../apps/ai-generator
+    environment:
+      Storage__ServiceUrl: http://minio:9000
+      Storage__BucketName: vi-ai-studio-builds
+      Storage__AccessKey: minioadmin
+      Storage__SecretKey: minioadmin
+      AiGenerator__WebhookSecret: dev-webhook-secret
+    ports:
+      - "8100:8080"
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ../apps/api
+    environment:
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=viaistudio;Username=viaistudio;Password=viaistudio"
+      Storage__ServiceUrl: http://minio:9000
+      Storage__AccessKey: minioadmin
+      Storage__SecretKey: minioadmin
+      Storage__BucketName: vi-ai-studio-builds
+      AiGenerator__BaseUrl: http://ai-generator:8080
+      AiGenerator__WebhookSecret: dev-webhook-secret
+      # Reachable by the ai-generator container so its build-progress
+      # callbacks land on this container, not the host's localhost.
+      Api__PublicBaseUrl: http://api:8080
+      Cors__AllowedOrigin: http://localhost:3000
+    ports:
+      - "5081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai-generator:
+        condition: service_started
+
+  web:
+    build:
+      context: ../apps/web
+      # Vite inlines VITE_API_BASE_URL into the static build at build time --
+      # unlike Next's NEXT_PUBLIC_* vars this can't be a runtime `environment:`.
+      args:
+        VITE_API_BASE_URL: http://localhost:5081
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  postgres-data:
+  minio-data:

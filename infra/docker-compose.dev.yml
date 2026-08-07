@@ -1,0 +1,44 @@
+## Local development: only the shared infra containers.
+## Run the three apps natively (dotnet run / dotnet run / npm run dev) against
+## these so hot-reload and debuggers work normally.
+##
+## Usage: docker compose -f docker-compose.dev.yml up
+
+# Explicit project name: this directory is called "infra", same as
+# vi-med-filler's, and Compose defaults the project name to the directory
+# basename. Without this, `docker compose up` here silently reuses (and can
+# recreate/wipe) vi-med-filler's "infra-postgres-1"/"infra-minio-1"
+# containers and volumes instead of creating vi-ai-studio's own.
+name: vi-ai-studio
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: viaistudio
+      POSTGRES_USER: viaistudio
+      POSTGRES_PASSWORD: viaistudio
+    ports:
+      # Host-mapped to 5433: many dev machines already have a native postgres
+      # listening on 5432, which silently wins the port and breaks host-side
+      # tools (dotnet ef, psql) even though `docker ps` looks fine.
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+volumes:
+  postgres-data:
+  minio-data:

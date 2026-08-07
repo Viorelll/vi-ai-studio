@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ViAiStudio.Api/ViAiStudio.Api.csproj" />
+    <Project Path="src/ViAiStudio.Application/ViAiStudio.Application.csproj" />
+    <Project Path="src/ViAiStudio.Domain/ViAiStudio.Domain.csproj" />
+    <Project Path="src/ViAiStudio.Infrastructure/ViAiStudio.Infrastructure.csproj" />
+  </Folder>
+</Solution>

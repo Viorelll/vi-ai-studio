@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en" class="h-full antialiased">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vi - AI Studio</title>
+    <meta name="description" content="Turn a specification into a running project, built by AI." />
+
+    <!-- design/README.md: "Font: Inter (400/500/600/700/800), loaded from
+         Google Fonts" -- matches the design reference's own font loading. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="h-full min-h-full flex flex-col bg-muted/40 text-foreground">
+    <div id="root" class="flex flex-1 flex-col min-h-full"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
