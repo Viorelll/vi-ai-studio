@@ -93,10 +93,13 @@ public static class SpecificationsEndpoints
             using var stream = new MemoryStream();
             using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
             {
-                var entry = zip.CreateEntry("specification.md", CompressionLevel.Fastest);
-                await using var entryStream = entry.Open();
-                await using var writer = new StreamWriter(entryStream, Encoding.UTF8);
-                await writer.WriteAsync(specification.SpecMarkdown);
+                foreach (var document in SpecificationDocumentSet.Build(specification))
+                {
+                    var entry = zip.CreateEntry(document.Path, CompressionLevel.Fastest);
+                    await using var entryStream = entry.Open();
+                    await using var writer = new StreamWriter(entryStream, Encoding.UTF8);
+                    await writer.WriteAsync(document.Content);
+                }
             }
 
             var fileName = Slugify(specification.Name) + "-specification.zip";

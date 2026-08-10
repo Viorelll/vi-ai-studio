@@ -49,6 +49,23 @@ public sealed class MinioStorageClient(IAmazonS3 s3Client, IOptions<MinioStorage
         return Task.FromResult(s3Client.GetPreSignedURL(request));
     }
 
+    public async Task<Stream> DownloadAsync(string storageKey, CancellationToken cancellationToken)
+    {
+        using var response = await s3Client.GetObjectAsync(new GetObjectRequest
+        {
+            BucketName = options.Value.BucketName,
+            Key = storageKey,
+        }, cancellationToken);
+
+        // Buffered into memory rather than handed back as the raw response stream --
+        // ZipArchive needs random (seekable) access to read a zip's central directory,
+        // which S3's network response stream doesn't support.
+        var buffer = new MemoryStream();
+        await response.ResponseStream.CopyToAsync(buffer, cancellationToken);
+        buffer.Position = 0;
+        return buffer;
+    }
+
     // GetPreSignedUrlRequest.Protocol defaults to HTTPS regardless of the
     // client's UseHttp config, which breaks presigned URLs against a
     // plain-HTTP local MinIO -- so it has to be set explicitly on every request.

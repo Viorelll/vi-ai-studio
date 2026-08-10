@@ -34,3 +34,14 @@ export function useGeneration(id: string | undefined) {
     enabled: Boolean(id),
   });
 }
+
+export function useGenerationFile(id: string | undefined, path: string | null) {
+  return useQuery({
+    queryKey: ["generations", id, "files", path],
+    queryFn: () =>
+      apiClient.get<{ path: string; content: string }>(
+        `/api/generations/${id}/files?path=${encodeURIComponent(path!)}`,
+      ),
+    enabled: Boolean(id) && Boolean(path),
+  });
+}

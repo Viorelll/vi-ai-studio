@@ -61,6 +61,16 @@ public sealed partial class GeneratePhaseChipsHandler(
 
     private static string BuildPrompt(Specification specification, SpecificationPhaseDefinition definition, string stepName)
     {
+        if (definition.Index == 1 && stepName == "Functional Requirements")
+        {
+            return BuildFunctionalRequirementsPrompt(specification);
+        }
+
+        if (definition.Index == 1 && stepName == "Non-functional Requirements")
+        {
+            return BuildNonFunctionalRequirementsPrompt(specification);
+        }
+
         var stack = specification.Stack;
         var lines = new List<string>
         {
@@ -74,6 +84,49 @@ public sealed partial class GeneratePhaseChipsHandler(
                 "this exact project. Tailor them to what this specific project actually needs, not a " +
                 "generic checklist -- similar in spirit to examples like Authentication, User & profile " +
                 "management, or CRUD/querying/filtering & pagination, but specific to this project's domain.",
+        };
+        return string.Join('\n', lines);
+    }
+
+    /// <summary>
+    /// Functional Requirements chips deliberately ignore the tech stack -- they're
+    /// about what the product *does* (its domain actions, users, pages), which
+    /// follows from the name and summary alone regardless of how it's built.
+    /// </summary>
+    private static string BuildFunctionalRequirementsPrompt(Specification specification)
+    {
+        var lines = new List<string>
+        {
+            $"Project: {specification.Name}",
+            $"Summary: {specification.Summary}",
+            $"List the top {ChipCount} functional requirements for this exact project, based only on its " +
+                "name and summary above -- the technology stack doesn't matter here. Tailor them to this " +
+                "project's specific domain, not a generic checklist: think in terms of the concrete actions " +
+                "and capabilities users need, e.g. create/update/delete/read the main subject of the app, " +
+                "user accounts, a landing page, and similar functional building blocks specific to this project.",
+        };
+        return string.Join('\n', lines);
+    }
+
+    /// <summary>
+    /// Non-functional Requirements chips are the technical counterpart -- unlike
+    /// Functional Requirements, these are meant to be shaped by the chosen stack
+    /// and the database entities/schema it implies.
+    /// </summary>
+    private static string BuildNonFunctionalRequirementsPrompt(Specification specification)
+    {
+        var stack = specification.Stack;
+        var lines = new List<string>
+        {
+            $"Project: {specification.Name}",
+            $"Summary: {specification.Summary}",
+            $"Stack: backend {stack.Backend}, UI {stack.Ui}, database {stack.Database}, " +
+                $"containerization {stack.Infra}, UI style {stack.UiStyle}",
+            $"List the top {ChipCount} non-functional requirements for this exact project, given its name, " +
+                "summary, and technology stack above. Keep in mind the database entities/schema this domain " +
+                "implies and technical concerns like performance, scalability, security, data integrity, and " +
+                "integration between the backend, UI, and database. Tailor them to this specific project and " +
+                "stack, not a generic checklist.",
         };
         return string.Join('\n', lines);
     }

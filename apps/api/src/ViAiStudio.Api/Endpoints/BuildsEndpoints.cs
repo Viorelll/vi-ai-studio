@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using System.Text;
 using System.Text.Json;
 using ViAiStudio.Api.Contracts;
 using ViAiStudio.Application.Builds;
@@ -52,8 +54,43 @@ public static class BuildsEndpoints
                 return Results.BadRequest(new { error = "This build has no archive yet." });
             }
 
-            var url = await blobStorage.CreatePresignedDownloadAsync(generation.ArchiveStorageKey, cancellationToken);
-            return Results.Redirect(url);
+            // Streamed through the Api rather than redirecting to a presigned MinIO
+            // URL. The browser sends an Authorization header here, which forces a CORS
+            // preflight, and the Fetch spec forbids a preflighted request from following
+            // a cross-origin redirect -- Chrome blocks it before MinIO is ever reached
+            // ("Request requires preflight, which is disallowed to follow cross-origin
+            // redirect"), so the redirect worked from curl but never from the app.
+            var archive = await blobStorage.DownloadAsync(generation.ArchiveStorageKey, cancellationToken);
+            return Results.File(archive, "application/zip", $"generation-v{generation.Version}.zip");
+        }).RequireAuthorization();
+
+        // Backs the file-preview pane on the "Generated project files" page: reads
+        // one entry out of the archive on demand rather than shipping the whole zip
+        // to the browser just to show one file.
+        app.MapGet("/api/generations/{id:guid}/files", async (
+            Guid id, string path, IGenerationRepository repository, IBlobStorage blobStorage, CancellationToken cancellationToken) =>
+        {
+            var generation = await repository.GetAsync(id, cancellationToken);
+            if (generation is null || !generation.FileTree.Contains(path))
+            {
+                return Results.NotFound();
+            }
+            if (string.IsNullOrWhiteSpace(generation.ArchiveStorageKey))
+            {
+                return Results.BadRequest(new { error = "This build has no archive yet." });
+            }
+
+            await using var archiveStream = await blobStorage.DownloadAsync(generation.ArchiveStorageKey, cancellationToken);
+            using var zip = new ZipArchive(archiveStream, ZipArchiveMode.Read);
+            var entry = zip.GetEntry(path);
+            if (entry is null)
+            {
+                return Results.NotFound();
+            }
+
+            using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
+            var content = await reader.ReadToEndAsync(cancellationToken);
+            return Results.Ok(new { path, content });
         }).RequireAuthorization();
 
         // Live build log for the AI Build page: one server-sent event per pipeline

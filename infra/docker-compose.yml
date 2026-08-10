@@ -46,6 +46,17 @@ services:
       Storage__AccessKey: minioadmin
       Storage__SecretKey: minioadmin
       AiGenerator__WebhookSecret: dev-webhook-secret
+      Sandbox__WorkspaceRoot: /workspaces
+      # The same directory as the *host* daemon sees it. Build sandboxes are
+      # sibling containers started through the mounted socket, so their bind
+      # mounts are resolved by the host -- a container-local path would come
+      # up silently empty.
+      Sandbox__HostWorkspaceRoot: ${BUILD_WORKSPACE_HOST_PATH:-/var/lib/vi-ai-studio/workspaces}
+    volumes:
+      # Generated code is compiled and run in throwaway sibling containers
+      # rather than inside this one; that needs the host daemon's socket.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${BUILD_WORKSPACE_HOST_PATH:-/var/lib/vi-ai-studio/workspaces}:/workspaces
     ports:
       - "8100:8080"
     depends_on:

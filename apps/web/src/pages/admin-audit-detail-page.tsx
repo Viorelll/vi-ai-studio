@@ -13,7 +13,12 @@ export function AdminAuditDetailPage() {
   const versionFilter = searchParams.get("version");
 
   const specsQuery = useSpecifications();
-  const logsQuery = useAuditLogs(id);
+  // Drilling in from "Generated projects" must keep showing build spend only,
+  // otherwise the detail totals disagree with the list row that led here.
+  const logsQuery = useAuditLogs(
+    id,
+    mode === "generated" ? "build" : "specification",
+  );
 
   if (specsQuery.isPending || logsQuery.isPending) return <PageLoading />;
 

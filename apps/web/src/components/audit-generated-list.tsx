@@ -49,7 +49,7 @@ export function AuditGeneratedList({
     try {
       const [logs, detail] = await Promise.all([
         apiClient.get<AiCallLogSummary[]>(
-          `/api/admin/audit/specifications/${spec.id}`,
+          `/api/admin/audit/specifications/${spec.id}?scope=build`,
         ),
         apiClient.get<SpecificationDetail>(`/api/specifications/${spec.id}`),
       ]);
@@ -149,7 +149,7 @@ export function AuditGeneratedList({
                   {versions?.map((v) => (
                     <Link
                       key={v.version}
-                      to={`/admin/audit/specifications/${spec.id}?version=${v.version}`}
+                      to={`/admin/audit/generated/${spec.id}?version=${v.version}`}
                       className="grid grid-cols-[1fr_1.4fr_1fr_1fr_1fr] items-center border-t px-5 py-3 hover:bg-muted/40"
                     >
                       <div className="flex items-center gap-2">

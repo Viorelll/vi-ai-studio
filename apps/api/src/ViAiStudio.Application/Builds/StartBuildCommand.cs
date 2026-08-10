@@ -1,4 +1,5 @@
 using ViAiStudio.Application.Common;
+using ViAiStudio.Application.Specifications;
 using ViAiStudio.Domain.Entities;
 
 namespace ViAiStudio.Application.Builds;
@@ -65,9 +66,7 @@ public sealed class StartBuildHandler(
             await aiGeneratorClient.StartBuildAsync(
                 generation.Id,
                 ModelCredentials.FromConfig(config),
-                specification.Name,
-                specification.SpecMarkdown!,
-                specification.Stack,
+                BuildSpecificationFor(specification),
                 cancellationToken);
         }
         catch (Exception ex)
@@ -81,4 +80,22 @@ public sealed class StartBuildHandler(
 
         return generation;
     }
+
+    /// <summary>
+    /// The complete brief handed to AI Generator: the authored basics plus both
+    /// renderings of the specification -- the single flattened markdown and the
+    /// per-phase document set the download bundle is made of -- so the model
+    /// generating the project sees everything the wizard captured.
+    /// </summary>
+    private static BuildSpecification BuildSpecificationFor(Specification specification) => new(
+        specification.Name,
+        specification.Summary,
+        specification.Description,
+        specification.Audience,
+        specification.Features,
+        specification.SpecMarkdown!,
+        specification.Stack,
+        SpecificationDocumentSet.Build(specification)
+            .Select(d => new BuildSpecificationDocument(d.Path, d.Content))
+            .ToList());
 }

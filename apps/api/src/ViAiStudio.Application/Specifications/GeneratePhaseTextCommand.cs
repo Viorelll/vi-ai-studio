@@ -74,6 +74,14 @@ public sealed class GeneratePhaseTextHandler(
         lines.Add($"Produces: {definition.Output}");
         if (phase.CheckedItems.Count > 0) lines.Add("Checklist items covered: " + string.Join(", ", phase.CheckedItems));
         if (phase.SelectedKeywords.Count > 0) lines.Add("Keywords: " + string.Join(", ", phase.SelectedKeywords));
+        if (definition.Items.Count > 1)
+        {
+            // SpecificationDocumentSet splits this phase's output into one file per
+            // item on download -- it looks for exactly these headings.
+            var headings = string.Join(", ", definition.Items.Select(item => $"\"## {item}\""));
+            lines.Add($"Structure the response with one markdown heading per item, using this exact heading " +
+                $"text and order: {headings}. Put each item's content under its own heading.");
+        }
         return string.Join('\n', lines);
     }
 }

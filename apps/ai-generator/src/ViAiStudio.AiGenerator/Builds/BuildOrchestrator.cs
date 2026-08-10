@@ -1,91 +1,81 @@
-using System.IO.Compression;
-using System.Text;
+using Microsoft.Extensions.Options;
 using ViAiStudio.AiGenerator.Callback;
 using ViAiStudio.AiGenerator.Contracts;
-using ViAiStudio.AiGenerator.Providers;
+using ViAiStudio.AiGenerator.Generation;
+using ViAiStudio.AiGenerator.Sandbox;
 using ViAiStudio.AiGenerator.Storage;
 
 namespace ViAiStudio.AiGenerator.Builds;
 
 /// <summary>
-/// Runs the AI Build pipeline for one job: Planning → Scaffolding → Coding →
-/// Tests → Done, reporting each step back to the Api and finishing with a
-/// generated file tree zipped into MinIO.
+/// Runs one AI Build end to end: the model generates the project from the
+/// specification, then every verification step is executed in a Docker
+/// sandbox and any failure is handed straight back to the model to fix. The
+/// build is only "done" once the backend compiles, the frontend compiles, and
+/// the stack boots against a real database -- so the artifact that reaches
+/// the user is one that provably ran, not one that merely looked plausible.
 /// </summary>
 public sealed class BuildOrchestrator(
-    IModelProvider modelProvider,
+    ProjectCodeGenerator codeGenerator,
+    ProjectVerifier verifier,
+    BuildWorkspaceFactory workspaceFactory,
     ApiCallbackClient callbackClient,
     MinioArchiveWriter archiveWriter,
     IBuildJobStore jobStore,
+    IOptions<SandboxOptions> sandboxOptions,
     ILogger<BuildOrchestrator> logger)
 {
-    private static readonly (string Label, string[] Lines)[] StepDefs =
-    [
-        ("Planning", ["Analyzing specification…", "Defining architecture…", "Generating project plan…"]),
-        ("Scaffolding", ["Creating repository structure…", "Installing dependencies…", "Configuring shadcn/ui + Tailwind…"]),
-        ("Coding", ["Generating components…", "Wiring API routes…", "Implementing business logic…"]),
-        ("Tests", ["Running unit tests…", "Running integration tests…", "All tests passed ✓"]),
-        ("Done", ["Finalizing build…", "Deployment successful ✓"]),
-    ];
+    private readonly SandboxOptions options = sandboxOptions.Value;
 
-    private static readonly Dictionary<string, string[]> StackFiles = new()
-    {
-        [".NET Web API"] = ["src/Api/Program.cs", "src/Api/appsettings.json", "src/Application/DependencyInjection.cs", "src/Domain/Entities/Entity.cs", "src/Infrastructure/AppDbContext.cs"],
-        ["Next.js"] = ["web/app/layout.tsx", "web/app/page.tsx", "web/app/globals.css", "web/next.config.js", "web/package.json"],
-        ["PostgreSQL"] = ["src/Infrastructure/AppDbContext.cs", "src/Infrastructure/Migrations/0001_Init.cs"],
-        ["Docker"] = ["Dockerfile", "docker-compose.yml", ".dockerignore"],
-    };
+    private const int GenerationCompletePct = 25;
+    private const int VerificationCompletePct = 92;
 
     public async Task RunAsync(string jobId, StartBuildRequest request, CancellationToken cancellationToken)
     {
         var startedAt = DateTimeOffset.UtcNow;
         var aiCalls = new List<BuildAiCallReport>();
-        var totalLines = StepDefs.Sum(s => s.Lines.Length);
-        var completed = 0;
+        using var workspace = workspaceFactory.Create(request.GenerationId);
 
         try
         {
-            foreach (var (label, lines) in StepDefs)
-            {
-                jobStore.Update(jobId, j => j.CurrentStep = label);
+            await GenerateProjectAsync(jobId, request, workspace, aiCalls, cancellationToken);
+            await VerifyProjectAsync(jobId, request, workspace, aiCalls, cancellationToken);
 
-                foreach (var line in lines)
-                {
-                    await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
-                    completed++;
-                    var pct = Math.Min(99, completed * 100 / totalLines);
+            await ReportAsync(jobId, request, "Done", "Packaging the project…", 95, cancellationToken);
+            var archiveStorageKey = await archiveWriter.WriteArchiveAsync(
+                request.GenerationId, workspace.CreateArchive(), cancellationToken);
 
-                    jobStore.Update(jobId, j => j.ProgressPct = pct);
-                    await callbackClient.ReportProgressAsync(request.CallbackBaseUrl, request.GenerationId, label, line, pct, cancellationToken);
-                }
-
-                if (label == "Coding")
-                {
-                    aiCalls.Add(await GenerateCodingCallAsync(request, cancellationToken));
-                }
-            }
-
-            var fileTree = BuildFileTree(request.Stack);
-            var archiveStorageKey = await archiveWriter.WriteArchiveAsync(request.GenerationId, BuildZip(request, fileTree), cancellationToken);
-            var duration = (int)(DateTimeOffset.UtcNow - startedAt).TotalSeconds;
-
-            jobStore.Update(jobId, j => { j.Status = BuildJobStatus.Ready; j.ProgressPct = 100; });
+            jobStore.Update(jobId, job => { job.Status = BuildJobStatus.Ready; job.ProgressPct = 100; });
             await callbackClient.ReportCompleteAsync(
                 request.CallbackBaseUrl, request.GenerationId,
-                new CompleteBuildPayload(Success: true, FailureReason: null, duration, fileTree, archiveStorageKey, aiCalls),
+                new CompleteBuildPayload(
+                    Success: true,
+                    FailureReason: null,
+                    Elapsed(startedAt),
+                    workspace.FileTree.ToList(),
+                    archiveStorageKey,
+                    aiCalls),
                 cancellationToken);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Build {GenerationId} failed", request.GenerationId);
-            jobStore.Update(jobId, j => j.Status = BuildJobStatus.Failed);
+            jobStore.Update(jobId, job => job.Status = BuildJobStatus.Failed);
 
             try
             {
-                var duration = (int)(DateTimeOffset.UtcNow - startedAt).TotalSeconds;
                 await callbackClient.ReportCompleteAsync(
                     request.CallbackBaseUrl, request.GenerationId,
-                    new CompleteBuildPayload(Success: false, ex.Message, duration, [], null, aiCalls),
+                    new CompleteBuildPayload(
+                        Success: false,
+                        ex.Message,
+                        Elapsed(startedAt),
+                        workspace.FileTree.ToList(),
+                        // Ship the archive even on failure: a project that got most of
+                        // the way is still worth inspecting, and the file tree the Api
+                        // records would otherwise point at nothing downloadable.
+                        await TryArchiveAsync(request.GenerationId, workspace),
+                        aiCalls),
                     CancellationToken.None);
             }
             catch (Exception callbackEx)
@@ -95,44 +85,123 @@ public sealed class BuildOrchestrator(
         }
     }
 
-    private async Task<BuildAiCallReport> GenerateCodingCallAsync(StartBuildRequest request, CancellationToken cancellationToken)
+    private async Task GenerateProjectAsync(
+        string jobId, StartBuildRequest request, BuildWorkspace workspace,
+        List<BuildAiCallReport> aiCalls, CancellationToken cancellationToken)
     {
-        const string systemPrompt = "You generate production code for a software project from its specification.";
-        var prompt = $"Project: {request.SpecificationName}\nStack: {request.Stack.Backend}, {request.Stack.Ui}, {request.Stack.Database}, {request.Stack.Infra}\n\n{request.SpecMarkdown}";
+        await ReportAsync(jobId, request, "Planning", "Analyzing the specification…", 4, cancellationToken);
+        await ReportAsync(jobId, request, "Coding", $"Generating the project with {request.Model}…", 8, cancellationToken);
 
-        var result = await modelProvider.GenerateAsync(
-            new ModelRequest(request.Provider, request.Model, request.BaseUrl, request.ApiKey, systemPrompt, prompt),
-            cancellationToken);
+        var generated = await codeGenerator.GenerateAsync(request, cancellationToken);
+        aiCalls.Add(generated.Call);
+        workspace.ApplyFiles(generated.Files);
 
-        return new BuildAiCallReport(request.Model, result.TokensIn, result.TokensOut, prompt, result.Text);
+        await ReportAsync(jobId, request, "Scaffolding",
+            $"Generated {workspace.FileTree.Count} files.", GenerationCompletePct, cancellationToken);
     }
 
-    private static List<string> BuildFileTree(StackDto stack)
+    private async Task VerifyProjectAsync(
+        string jobId, StartBuildRequest request, BuildWorkspace workspace,
+        List<BuildAiCallReport> aiCalls, CancellationToken cancellationToken)
     {
-        var chosen = new[] { stack.Backend, stack.Ui, stack.Database, stack.Infra };
-        var files = chosen
-            .Where(StackFiles.ContainsKey)
-            .SelectMany(t => StackFiles[t])
-            .Distinct()
-            .ToList();
-        files.Add("README.md");
-        return files;
-    }
+        var steps = verifier.Steps;
+        var span = (VerificationCompletePct - GenerationCompletePct) / (double)steps.Count;
 
-    private static byte[] BuildZip(StartBuildRequest request, List<string> fileTree)
-    {
-        using var stream = new MemoryStream();
-        using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        for (var index = 0; index < steps.Count; index++)
         {
-            foreach (var path in fileTree)
+            var step = steps[index];
+            var stepStartPct = GenerationCompletePct + (int)(span * index);
+
+            await ReportAsync(jobId, request, step.Name, step.StartMessage, stepStartPct, cancellationToken);
+
+            var result = await RunStepWithRepairAsync(jobId, request, workspace, step, aiCalls, stepStartPct, cancellationToken);
+            if (!result.Succeeded)
             {
-                var entry = zip.CreateEntry(path, CompressionLevel.Fastest);
-                using var writer = new StreamWriter(entry.Open(), Encoding.UTF8);
-                writer.Write(path.EndsWith(".md")
-                    ? $"# {request.SpecificationName}\n\nGenerated by AI Build.\n"
-                    : $"// Generated by AI Build for {request.SpecificationName}\n// {path}\n");
+                throw new InvalidOperationException(
+                    $"{step.Name} still failing after {options.MaxRepairAttempts} repair attempt(s). Last output:\n{Tail(result.Output)}");
             }
+
+            await ReportAsync(jobId, request, step.Name, $"{step.Name} passed ✓",
+                GenerationCompletePct + (int)(span * (index + 1)), cancellationToken);
         }
-        return stream.ToArray();
     }
+
+    /// <summary>
+    /// Runs one verification step, feeding its failure output back to the model
+    /// and re-running until it passes or the attempt budget is spent. Bails out
+    /// early if a repair round produces no file changes -- re-running an
+    /// identical workspace would just burn tokens on the same failure.
+    /// </summary>
+    private async Task<SandboxRunResult> RunStepWithRepairAsync(
+        string jobId, StartBuildRequest request, BuildWorkspace workspace, VerificationStep step,
+        List<BuildAiCallReport> aiCalls, int stepStartPct, CancellationToken cancellationToken)
+    {
+        var result = await verifier.RunAsync(step, workspace.HostPath, cancellationToken);
+
+        for (var attempt = 1; attempt <= options.MaxRepairAttempts && !result.Succeeded; attempt++)
+        {
+            await ReportAsync(jobId, request, step.Name,
+                $"{step.Name} failed — asking {request.Model} for a fix (attempt {attempt}/{options.MaxRepairAttempts})…",
+                stepStartPct, cancellationToken);
+
+            var repair = await codeGenerator.RepairAsync(
+                request, workspace.Files, step.Name, result.Output, cancellationToken);
+            aiCalls.Add(repair.Call);
+
+            if (workspace.ApplyFiles(repair.Files) == 0)
+            {
+                logger.LogWarning("Repair attempt {Attempt} for {Step} changed no files; stopping early", attempt, step.Name);
+                break;
+            }
+
+            await ReportAsync(jobId, request, step.Name,
+                $"Applied {repair.Files.Count} file change(s); re-running {step.Name}…", stepStartPct, cancellationToken);
+
+            result = await verifier.RunAsync(step, workspace.HostPath, cancellationToken);
+        }
+
+        return result;
+    }
+
+    private async Task<string?> TryArchiveAsync(Guid generationId, BuildWorkspace workspace)
+    {
+        if (workspace.FileTree.Count == 0) return null;
+
+        try
+        {
+            return await archiveWriter.WriteArchiveAsync(generationId, workspace.CreateArchive(), CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Could not archive the partial project for {GenerationId}", generationId);
+            return null;
+        }
+    }
+
+    private async Task ReportAsync(
+        string jobId, StartBuildRequest request, string stepLabel, string logLine, int progressPct, CancellationToken cancellationToken)
+    {
+        jobStore.Update(jobId, job =>
+        {
+            job.CurrentStep = stepLabel;
+            job.ProgressPct = progressPct;
+        });
+
+        try
+        {
+            await callbackClient.ReportProgressAsync(
+                request.CallbackBaseUrl, request.GenerationId, stepLabel, logLine, progressPct, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // Progress is telemetry: losing a line must not abort a build that is
+            // otherwise fine. The terminal complete/fail callback is what matters.
+            logger.LogWarning(ex, "Could not report progress for {GenerationId}", request.GenerationId);
+        }
+    }
+
+    private static int Elapsed(DateTimeOffset startedAt) => (int)(DateTimeOffset.UtcNow - startedAt).TotalSeconds;
+
+    private static string Tail(string output, int max = 4000) =>
+        output.Length <= max ? output : output[^max..];
 }

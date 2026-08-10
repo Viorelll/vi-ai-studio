@@ -14,6 +14,25 @@ public sealed record GeneratedText(string Text, int TokensIn, int TokensOut);
 
 public sealed record BuildDispatchResult(string JobId);
 
+/// <summary>One rendered specification markdown file (see SpecificationDocumentSet).</summary>
+public sealed record BuildSpecificationDocument(string Path, string Content);
+
+/// <summary>
+/// Everything AI Generator needs to know about *what* to build: the authored
+/// specification in full (basics, the rendered markdown, and the per-phase
+/// document set) plus the tech stack it must be built on. AI Generator holds
+/// no specification state of its own, so this is the complete brief.
+/// </summary>
+public sealed record BuildSpecification(
+    string Name,
+    string Summary,
+    string Description,
+    string Audience,
+    string Features,
+    string SpecMarkdown,
+    TechStack Stack,
+    IReadOnlyList<BuildSpecificationDocument> Documents);
+
 /// <summary>
 /// Talks to the stateless ViAiStudio.AiGenerator service. The Api never calls
 /// a model provider directly -- it resolves credentials from
@@ -36,8 +55,6 @@ public interface IAiGeneratorClient
     Task<BuildDispatchResult> StartBuildAsync(
         Guid generationId,
         ModelCredentials credentials,
-        string specificationName,
-        string specMarkdown,
-        TechStack stack,
+        BuildSpecification specification,
         CancellationToken cancellationToken);
 }

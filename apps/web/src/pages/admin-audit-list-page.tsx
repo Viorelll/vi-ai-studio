@@ -22,7 +22,11 @@ export function AdminAuditListPage() {
   const { mode } = useParams<{ mode: string }>();
   const isValidMode = mode === "specifications" || mode === "generated";
 
-  const rollupsQuery = useAuditRollups();
+  // Each surface totals only its own activity: the wizard's drafting calls here,
+  // AI Build's code-generation calls there. Summing them would double-count.
+  const rollupsQuery = useAuditRollups(
+    mode === "generated" ? "build" : "specification",
+  );
   const specsQuery = useSpecifications();
   const generatedQuery = useGeneratedProjects();
 

@@ -2,7 +2,6 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using ViAiStudio.Application.Common;
-using ViAiStudio.Domain.ValueObjects;
 
 namespace ViAiStudio.Infrastructure.AiGenerator;
 
@@ -17,9 +16,11 @@ public sealed class AiGeneratorHttpClient(HttpClient httpClient, IConfiguration 
     private sealed record GenerateTextResponseBody(string Text, int TokensIn, int TokensOut);
 
     private sealed record StackBody(string Backend, string Ui, string Database, string Infra, string UiStyle);
+    private sealed record SpecDocumentBody(string Path, string Content);
     private sealed record StartBuildRequestBody(
         Guid GenerationId, string Provider, string Model, string BaseUrl, string ApiKey,
-        string SpecificationName, string SpecMarkdown, StackBody Stack, string CallbackBaseUrl);
+        string SpecificationName, string Summary, string Description, string Audience, string Features,
+        string SpecMarkdown, StackBody Stack, IReadOnlyList<SpecDocumentBody> Documents, string CallbackBaseUrl);
     private sealed record StartBuildResponseBody(string JobId);
 
     private sealed record ErrorResponse(string? Detail);
@@ -42,18 +43,20 @@ public sealed class AiGeneratorHttpClient(HttpClient httpClient, IConfiguration 
     }
 
     public async Task<BuildDispatchResult> StartBuildAsync(
-        Guid generationId, ModelCredentials credentials, string specificationName, string specMarkdown,
-        TechStack stack, CancellationToken cancellationToken)
+        Guid generationId, ModelCredentials credentials, BuildSpecification specification, CancellationToken cancellationToken)
     {
         var callbackBaseUrl = configuration["Api:PublicBaseUrl"]
             ?? throw new InvalidOperationException("Api:PublicBaseUrl must be configured so AI Generator can report build progress back.");
 
+        var stack = specification.Stack;
         var response = await httpClient.PostAsJsonAsync(
             "/v1/builds",
             new StartBuildRequestBody(
                 generationId, credentials.Provider.ToString(), credentials.Model, credentials.BaseUrl, credentials.ApiKey,
-                specificationName, specMarkdown,
+                specification.Name, specification.Summary, specification.Description, specification.Audience,
+                specification.Features, specification.SpecMarkdown,
                 new StackBody(stack.Backend, stack.Ui, stack.Database, stack.Infra, stack.UiStyle),
+                specification.Documents.Select(d => new SpecDocumentBody(d.Path, d.Content)).ToList(),
                 callbackBaseUrl),
             JsonOptions,
             cancellationToken);

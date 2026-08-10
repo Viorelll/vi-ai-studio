@@ -5,7 +5,9 @@ using Scalar.AspNetCore;
 using ViAiStudio.AiGenerator.Builds;
 using ViAiStudio.AiGenerator.Callback;
 using ViAiStudio.AiGenerator.Endpoints;
+using ViAiStudio.AiGenerator.Generation;
 using ViAiStudio.AiGenerator.Providers;
+using ViAiStudio.AiGenerator.Sandbox;
 using ViAiStudio.AiGenerator.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,7 +22,12 @@ builder.Services.AddCors(options =>
         .AllowAnyMethod());
 });
 
-builder.Services.AddSingleton<IModelProvider, SimulatedModelProvider>();
+builder.Services.AddHttpClient<IModelProvider, AzureFoundryModelProvider>(client =>
+{
+    // Generating or repairing an entire repository is one long-running request;
+    // HttpClient's 100-second default aborts it mid-flight.
+    client.Timeout = TimeSpan.FromMinutes(15);
+});
 builder.Services.AddHttpClient<ApiCallbackClient>();
 
 builder.Services.Configure<MinioArchiveOptions>(builder.Configuration.GetSection("Storage"));
@@ -37,6 +44,12 @@ builder.Services.AddSingleton<IAmazonS3>(sp =>
     return new AmazonS3Client(credentials, config);
 });
 builder.Services.AddSingleton<MinioArchiveWriter>();
+
+builder.Services.Configure<SandboxOptions>(builder.Configuration.GetSection("Sandbox"));
+builder.Services.AddSingleton<ISandboxExecutor, DockerSandboxExecutor>();
+builder.Services.AddSingleton<ProjectVerifier>();
+builder.Services.AddSingleton<BuildWorkspaceFactory>();
+builder.Services.AddSingleton<ProjectCodeGenerator>();
 
 builder.Services.AddSingleton<IBuildJobStore, InMemoryBuildJobStore>();
 builder.Services.AddSingleton<BuildQueue>();

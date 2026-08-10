@@ -10,15 +10,15 @@ public static class AuditEndpoints
         var group = app.MapGroup("/api/admin/audit")
             .RequireAuthorization(policy => policy.RequireRole("Admin"));
 
-        group.MapGet("/specifications", async (IAiCallLogRepository repository, CancellationToken cancellationToken) =>
+        group.MapGet("/specifications", async (string? scope, IAiCallLogRepository repository, CancellationToken cancellationToken) =>
         {
-            var rollups = await repository.RollupBySpecificationAsync(cancellationToken);
+            var rollups = await repository.RollupBySpecificationAsync(ParseScope(scope), cancellationToken);
             return Results.Ok(rollups.Select(AiCallLogRollupResponse.FromRollup));
         });
 
-        group.MapGet("/specifications/{id:guid}", async (Guid id, IAiCallLogRepository repository, CancellationToken cancellationToken) =>
+        group.MapGet("/specifications/{id:guid}", async (Guid id, string? scope, IAiCallLogRepository repository, CancellationToken cancellationToken) =>
         {
-            var logs = await repository.ListBySpecificationAsync(id, cancellationToken);
+            var logs = await repository.ListBySpecificationAsync(id, ParseScope(scope), cancellationToken);
             return Results.Ok(logs.Select(AiCallLogResponse.FromEntity));
         });
 
@@ -28,4 +28,12 @@ public static class AuditEndpoints
             return log is not null ? Results.Ok(AiCallLogDetailResponse.FromEntity(log)) : Results.NotFound();
         });
     }
+
+    /// <summary>
+    /// Unrecognised or missing values fall back to <see cref="AiCallLogScope.All"/>
+    /// rather than erroring, so an old client keeps seeing the combined totals
+    /// it always did instead of an empty table.
+    /// </summary>
+    private static AiCallLogScope ParseScope(string? scope) =>
+        Enum.TryParse<AiCallLogScope>(scope, ignoreCase: true, out var parsed) ? parsed : AiCallLogScope.All;
 }
