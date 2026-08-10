@@ -14,6 +14,8 @@ public sealed record UpdateSpecificationBasicsRequest(string? Name, string? Summ
 
 public sealed record SaveSpecificationPhaseRequest(List<string> CheckedItems, List<string> SelectedKeywords);
 
+public sealed record GeneratePhaseChipsRequest(string StepName);
+
 public sealed record CreateAiModelConfigRequest(string Label, AiProvider Provider, string Model, string BaseUrl, string ApiKey);
 
 public sealed record UpdateAiModelConfigRequest(string Label, AiProvider Provider, string Model, string BaseUrl, string ApiKey);

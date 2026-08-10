@@ -61,6 +61,16 @@ export function useGeneratePhaseText(specId: string) {
   });
 }
 
+export function useGeneratePhaseChips(specId: string) {
+  return useMutation({
+    mutationFn: ({ phaseIndex, stepName }: { phaseIndex: number; stepName: string }) =>
+      apiClient.post<{ chips: string[] }>(
+        `/api/specifications/${specId}/phases/${phaseIndex}/chips`,
+        { stepName },
+      ),
+  });
+}
+
 export function useDeleteSpecification() {
   const queryClient = useQueryClient();
   return useMutation({

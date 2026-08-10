@@ -17,8 +17,7 @@ public sealed record GeneratePhaseTextCommand(Guid SpecificationId, int PhaseInd
 /// </summary>
 public sealed class GeneratePhaseTextHandler(
     ISpecificationRepository specificationRepository,
-    ITaskRoutingRepository taskRoutingRepository,
-    IAiModelConfigRepository aiModelConfigRepository,
+    SpecGenerationModelResolver modelResolver,
     IAiCallLogRepository aiCallLogRepository,
     IAiGeneratorClient aiGeneratorClient)
 {
@@ -32,7 +31,7 @@ public sealed class GeneratePhaseTextHandler(
         var phase = specification.Phases.SingleOrDefault(p => p.PhaseIndex == command.PhaseIndex)
             ?? throw new InvalidOperationException($"Specification '{command.SpecificationId}' has no phase at index {command.PhaseIndex}.");
 
-        var config = await ResolveModelAsync(cancellationToken);
+        var config = await modelResolver.ResolveAsync(cancellationToken);
 
         const string systemPrompt = "You draft one phase of a software project specification as concise markdown.";
         var prompt = BuildPrompt(specification, definition, phase);
@@ -60,32 +59,6 @@ public sealed class GeneratePhaseTextHandler(
         await aiCallLogRepository.SaveChangesAsync(cancellationToken);
 
         return phase;
-    }
-
-    /// <summary>
-    /// Looks up which <see cref="AiModelConfig"/> to call, entirely from the
-    /// database -- AI Generator itself is never asked to make this decision,
-    /// it only ever receives the credentials this resolves to.
-    /// </summary>
-    private async Task<AiModelConfig> ResolveModelAsync(CancellationToken cancellationToken)
-    {
-        var specRouting = await taskRoutingRepository.GetAsync(AiTaskType.SpecGeneration, cancellationToken);
-        var configId = specRouting?.AiModelConfigId;
-
-        if (configId is null)
-        {
-            var codeRouting = await taskRoutingRepository.GetAsync(AiTaskType.CodeGeneration, cancellationToken);
-            configId = codeRouting?.AiModelConfigId;
-        }
-
-        if (configId is null)
-        {
-            throw new InvalidOperationException(
-                "No model is routed to Spec generation or Code generation yet. Configure one in Admin → AI model configuration.");
-        }
-
-        return await aiModelConfigRepository.GetAsync(configId.Value, cancellationToken)
-            ?? throw new InvalidOperationException($"Routed model configuration '{configId}' no longer exists.");
     }
 
     private static string BuildPrompt(Specification specification, SpecificationPhaseDefinition definition, SpecificationPhase phase)

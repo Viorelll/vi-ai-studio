@@ -65,6 +65,13 @@ public static class SpecificationsEndpoints
             return Results.Ok(SpecificationPhaseResponse.FromEntity(phase));
         });
 
+        group.MapPost("/{id:guid}/phases/{phaseIndex:int}/chips", async (
+            Guid id, int phaseIndex, GeneratePhaseChipsRequest request, GeneratePhaseChipsHandler handler, CancellationToken cancellationToken) =>
+        {
+            var chips = await handler.HandleAsync(new GeneratePhaseChipsCommand(id, phaseIndex, request.StepName), cancellationToken);
+            return Results.Ok(new GeneratePhaseChipsResponse(chips));
+        });
+
         group.MapPost("/{id:guid}/finalize", async (Guid id, FinalizeSpecificationHandler handler, CancellationToken cancellationToken) =>
         {
             var specification = await handler.HandleAsync(new FinalizeSpecificationCommand(id), cancellationToken);

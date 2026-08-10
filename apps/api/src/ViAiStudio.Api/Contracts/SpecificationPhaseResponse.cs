@@ -20,6 +20,8 @@ public sealed record SpecificationPhaseResponse(
     }
 }
 
+public sealed record GeneratePhaseChipsResponse(IReadOnlyList<string> Chips);
+
 /// <summary>The static 15-phase catalog, served once so the web client can render the wizard shell.</summary>
 public sealed record SpecificationPhaseDefinitionResponse(int Index, string Title, IReadOnlyList<string> Items, string Output)
 {

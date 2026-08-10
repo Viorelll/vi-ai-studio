@@ -24,12 +24,12 @@ import {
 } from "@/components/ui/select";
 import { StudioArchitectureDiagram } from "@/components/studio-architecture-diagram";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
-import { KEYWORD_BANK } from "@/lib/keyword-bank";
 import { buildPhaseMarkdown } from "@/lib/wizard-markdown";
 import { ApiError } from "@/lib/api-client";
 import {
   useDeleteSpecification,
   useFinalizeSpecification,
+  useGeneratePhaseChips,
   useGeneratePhaseText,
   useSaveSpecificationPhase,
   useUpdateSpecificationBasics,
@@ -96,6 +96,7 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
   const updateBasics = useUpdateSpecificationBasics(spec.id);
   const savePhase = useSaveSpecificationPhase(spec.id);
   const generatePhaseText = useGeneratePhaseText(spec.id);
+  const generatePhaseChips = useGeneratePhaseChips(spec.id);
   const finalizeSpecification = useFinalizeSpecification(spec.id);
   const deleteSpecification = useDeleteSpecification();
 
@@ -164,6 +165,62 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
 
   const activePhase = phases[activePhaseIndex];
   const activeItem = activePhase.items[activeItemIndex] as string | undefined;
+
+  const [chips, setChips] = useState<string[]>([]);
+  const [chipsLoading, setChipsLoading] = useState(false);
+  const [chipsError, setChipsError] = useState<string | null>(null);
+  const [chipsRefreshKey, setChipsRefreshKey] = useState(0);
+  const chipsCacheRef = useRef<Map<string, string[]>>(new Map());
+
+  // Auto-generates keyword-chip suggestions for whichever step is in view,
+  // as soon as the mandatory project basics are filled in -- no button
+  // click needed. Cached per phase+step so revisiting one doesn't re-ask.
+  useEffect(() => {
+    if (basicsIncomplete || !activeItem) {
+      setChips([]);
+      setChipsError(null);
+      return;
+    }
+    const key = `${activePhase.phaseIndex}:${activeItemIndex}`;
+    const cached = chipsCacheRef.current.get(key);
+    if (cached) {
+      setChips(cached);
+      setChipsError(null);
+      return;
+    }
+    let cancelled = false;
+    setChipsLoading(true);
+    setChipsError(null);
+    generatePhaseChips
+      .mutateAsync({ phaseIndex: activePhase.phaseIndex, stepName: activeItem })
+      .then((result) => {
+        if (cancelled) return;
+        chipsCacheRef.current.set(key, result.chips);
+        setChips(result.chips);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setChips([]);
+        setChipsError(
+          err instanceof ApiError
+            ? err.message
+            : "Couldn't generate suggestions for this step.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setChipsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [basicsIncomplete, activePhase.phaseIndex, activeItemIndex, activeItem, chipsRefreshKey]);
+
+  function regenerateChips() {
+    if (!activeItem) return;
+    chipsCacheRef.current.delete(`${activePhase.phaseIndex}:${activeItemIndex}`);
+    setChipsRefreshKey((n) => n + 1);
+  }
 
   const completedPhaseCount = useMemo(
     () =>
@@ -505,29 +562,51 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
             </Label>
           )}
 
-          <Label className="text-[13px] font-semibold mb-2">Keywords</Label>
-          <div className="flex flex-wrap gap-1.5 mb-5">
+          <div className="flex items-center justify-between mb-2">
+            <Label className="text-[13px] font-semibold">Keywords</Label>
+            <Button
+              type="button"
+              size="sm"
+              onClick={regenerateChips}
+              disabled={basicsIncomplete || chipsLoading || !activeItem}
+            >
+              {chipsLoading ? "Generating…" : "Generate"}
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 mb-5">
+            {chipsLoading && (
+              <span className="text-[12.5px] text-muted-foreground">
+                Generating suggestions…
+              </span>
+            )}
+            {!chipsLoading && chipsError && (
+              <span className="text-[12.5px] text-destructive">
+                {chipsError}
+              </span>
+            )}
             {/* Selected keyword chips are hardcoded dark like the phase circles above, not accent-driven. */}
-            {(KEYWORD_BANK[activePhase.phaseIndex] ?? []).map((keyword) => {
-              const selected = activePhase.selectedKeywords.includes(keyword);
-              return (
-                <Button
-                  key={keyword}
-                  type="button"
-                  variant="outline"
-                  onClick={() => toggleKeyword(keyword)}
-                  disabled={basicsIncomplete}
-                  className={`h-auto rounded-full px-3 py-1.5 text-[12.5px] font-medium whitespace-nowrap ${
-                    selected
-                      ? "border-[#18181b] bg-[#18181b] text-white hover:bg-[#18181b] hover:text-white"
-                      : "border-[#e4e4e7] bg-white text-[#3f3f46] hover:bg-[#f4f4f5]"
-                  }`}
-                  aria-pressed={selected}
-                >
-                  {keyword}
-                </Button>
-              );
-            })}
+            {!chipsLoading &&
+              !chipsError &&
+              chips.map((keyword) => {
+                const selected = activePhase.selectedKeywords.includes(keyword);
+                return (
+                  <Button
+                    key={keyword}
+                    type="button"
+                    variant="outline"
+                    onClick={() => toggleKeyword(keyword)}
+                    disabled={basicsIncomplete}
+                    className={`h-auto rounded-full px-3 py-1.5 text-[12.5px] font-medium whitespace-nowrap ${
+                      selected
+                        ? "border-[#18181b] bg-[#18181b] text-white hover:bg-[#18181b] hover:text-white"
+                        : "border-[#e4e4e7] bg-white text-[#3f3f46] hover:bg-[#f4f4f5]"
+                    }`}
+                    aria-pressed={selected}
+                  >
+                    {keyword}
+                  </Button>
+                );
+              })}
           </div>
 
           {activePhase.phaseIndex === TECHNICAL_DESIGN_PHASE_INDEX && (

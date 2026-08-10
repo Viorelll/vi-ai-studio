@@ -52,7 +52,9 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddScoped<CreateSpecificationHandler>();
 builder.Services.AddScoped<UpdateSpecificationBasicsHandler>();
 builder.Services.AddScoped<SaveSpecificationPhaseHandler>();
+builder.Services.AddScoped<SpecGenerationModelResolver>();
 builder.Services.AddScoped<GeneratePhaseTextHandler>();
+builder.Services.AddScoped<GeneratePhaseChipsHandler>();
 builder.Services.AddScoped<FinalizeSpecificationHandler>();
 builder.Services.AddScoped<DeleteSpecificationHandler>();
 
