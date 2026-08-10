@@ -404,58 +404,58 @@ export function AiConfigManager() {
 
       <div className="text-[15px] font-bold mb-3.5">Task routing</div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {TASK_DEFS.filter((task) => task.key !== "specGeneration").map(
-          (task) => {
-            const currentRouting = routing.find((r) => r.task === task.key);
-            return (
-              <Card key={task.key} className="rounded-[12px] p-4.5">
-                <Field className="gap-1">
-                  <FieldLabel
-                    htmlFor={`task-routing-${task.key}`}
-                    className="text-sm font-bold"
+        {TASK_DEFS.map((task) => {
+          const currentRouting = routing.find((r) => r.task === task.key);
+          return (
+            <Card key={task.key} className="rounded-[12px] p-4.5">
+              <Field className="gap-1">
+                <FieldLabel
+                  htmlFor={`task-routing-${task.key}`}
+                  className="text-sm font-bold"
+                >
+                  {task.label}
+                </FieldLabel>
+                <FieldDescription className="mb-2.5 text-[12.5px]">
+                  {task.key === "specGeneration"
+                    ? `${task.desc} Falls back to whatever is routed to Code generation when left unassigned.`
+                    : task.desc}
+                </FieldDescription>
+                <Select
+                  value={currentRouting?.aiModelConfigId ?? "__unassigned__"}
+                  onValueChange={(v) =>
+                    updateRouting.mutate({
+                      task: task.key,
+                      aiModelConfigId:
+                        v === "__unassigned__" ? null : (v ?? null),
+                    })
+                  }
+                >
+                  <SelectTrigger
+                    id={`task-routing-${task.key}`}
+                    className="w-full"
                   >
-                    {task.label}
-                  </FieldLabel>
-                  <FieldDescription className="mb-2.5 text-[12.5px]">
-                    {task.desc}
-                  </FieldDescription>
-                  <Select
-                    value={currentRouting?.aiModelConfigId ?? "__unassigned__"}
-                    onValueChange={(v) =>
-                      updateRouting.mutate({
-                        task: task.key,
-                        aiModelConfigId:
-                          v === "__unassigned__" ? null : (v ?? null),
-                      })
-                    }
-                  >
-                    <SelectTrigger
-                      id={`task-routing-${task.key}`}
-                      className="w-full"
-                    >
-                      <SelectValue>
-                        {() => {
-                          const assigned = configs.find(
-                            (c) => c.id === currentRouting?.aiModelConfigId,
-                          );
-                          return assigned?.label ?? "Unassigned";
-                        }}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__unassigned__">Unassigned</SelectItem>
-                      {configs.map((config) => (
-                        <SelectItem key={config.id} value={config.id}>
-                          {config.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </Card>
-            );
-          },
-        )}
+                    <SelectValue>
+                      {() => {
+                        const assigned = configs.find(
+                          (c) => c.id === currentRouting?.aiModelConfigId,
+                        );
+                        return assigned?.label ?? "Unassigned";
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__unassigned__">Unassigned</SelectItem>
+                    {configs.map((config) => (
+                      <SelectItem key={config.id} value={config.id}>
+                        {config.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

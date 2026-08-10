@@ -19,7 +19,7 @@ public sealed class CreateSpecificationHandler(ISpecificationRepository specific
         var specification = new Specification
         {
             Id = Guid.NewGuid(),
-            Name = string.IsNullOrWhiteSpace(command.Name) ? "Untitled Project" : command.Name,
+            Name = command.Name,
             Summary = command.Summary,
             Owner = command.Owner,
             Status = SpecificationStatus.Draft,

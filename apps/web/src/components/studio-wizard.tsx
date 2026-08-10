@@ -26,6 +26,7 @@ import { StudioArchitectureDiagram } from "@/components/studio-architecture-diag
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { KEYWORD_BANK } from "@/lib/keyword-bank";
 import { buildPhaseMarkdown } from "@/lib/wizard-markdown";
+import { ApiError } from "@/lib/api-client";
 import {
   useDeleteSpecification,
   useFinalizeSpecification,
@@ -108,6 +109,11 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
   const [activeItemIndex, setActiveItemIndex] = useState(0);
   const [finalizing, setFinalizing] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+
+  const nameMissing = name.trim().length === 0;
+  const summaryMissing = summary.trim().length === 0;
+  const basicsIncomplete = nameMissing || summaryMissing;
 
   const isUntitled = name.trim() === "" || name.trim() === "Untitled Project";
   const nameRef = useRef(name);
@@ -205,16 +211,29 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
   function jumpPhase(index: number) {
     setActivePhaseIndex(index);
     setActiveItemIndex(0);
+    setGenerateError(null);
   }
 
   async function generate() {
+    setGenerateError(null);
     try {
       const updated = await generatePhaseText.mutateAsync(
         activePhase.phaseIndex,
       );
-      updatePhase(activePhaseIndex, { generatedText: updated.generatedText });
-    } catch {
-      // Non-fatal in the wizard -- the phase just keeps its checklist/keyword preview.
+      const checkedItems =
+        activeItem && !activePhase.checkedItems.includes(activeItem)
+          ? [...activePhase.checkedItems, activeItem]
+          : activePhase.checkedItems;
+      updatePhase(activePhaseIndex, {
+        generatedText: updated.generatedText,
+        checkedItems,
+      });
+    } catch (err) {
+      setGenerateError(
+        err instanceof ApiError
+          ? err.message
+          : "Something went wrong generating this phase.",
+      );
     }
   }
 
@@ -240,6 +259,7 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
     const prevIndex = activePhaseIndex - 1;
     setActivePhaseIndex(prevIndex);
     setActiveItemIndex(Math.max(0, phases[prevIndex].items.length - 1));
+    setGenerateError(null);
   }
 
   async function next() {
@@ -250,6 +270,7 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
     if (activePhaseIndex < phases.length - 1) {
       setActivePhaseIndex(activePhaseIndex + 1);
       setActiveItemIndex(0);
+      setGenerateError(null);
       return;
     }
     setFinalizing(true);
@@ -305,28 +326,37 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
           <div className="flex flex-col gap-2.5 mb-4">
             <Field className="gap-1.5">
               <FieldLabel htmlFor="studio-project-name" className="sr-only">
-                Project name
+                Project name (required)
               </FieldLabel>
               <Input
                 id="studio-project-name"
-                placeholder="Project name"
+                placeholder="Project name *"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onBlur={saveBasics}
+                required
+                aria-invalid={nameMissing}
               />
             </Field>
             <Field className="gap-1.5">
               <FieldLabel htmlFor="studio-project-summary" className="sr-only">
-                One-line summary
+                One-line summary (required)
               </FieldLabel>
               <Input
                 id="studio-project-summary"
-                placeholder="One-line summary"
+                placeholder="One-line summary *"
                 value={summary}
                 onChange={(e) => setSummary(e.target.value)}
                 onBlur={saveBasics}
+                required
+                aria-invalid={summaryMissing}
               />
             </Field>
+            {basicsIncomplete && (
+              <p className="text-[11px] text-destructive">
+                Name and summary are required to start the wizard.
+              </p>
+            )}
             {STACK_FIELDS.map((field) => (
               <Field key={field.key} className="gap-1">
                 <FieldLabel
@@ -363,7 +393,7 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
 
           <Separator className="mb-3" />
           <div className="text-[11px] font-semibold text-[#a1a1aa] uppercase tracking-wide mb-2">
-            15 phases
+            {phases.length} phase{phases.length === 1 ? "" : "s"}
           </div>
           <ScrollArea className="h-[520px]">
             <div className="flex flex-col gap-0.5 pr-2">
@@ -378,6 +408,7 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
                     type="button"
                     variant="ghost"
                     onClick={() => jumpPhase(index)}
+                    disabled={basicsIncomplete}
                     className={`h-auto w-full justify-start gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-[#f4f4f5] ${active ? "bg-[#f4f4f5]" : ""}`}
                     aria-current={active ? "step" : undefined}
                   >
@@ -424,6 +455,13 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
             Produces: {activePhase.output}
           </p>
 
+          {basicsIncomplete && (
+            <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[12.5px] text-amber-800">
+              Set a project name and summary in the panel on the left to
+              unlock this wizard.
+            </div>
+          )}
+
           <div className="flex gap-1.5 mb-3.5">
             {activePhase.items.map((item, itemIdx) => {
               const checked = activePhase.checkedItems.includes(item);
@@ -455,6 +493,7 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
                 id={`studio-item-${activePhase.phaseIndex}-${activeItemIndex}`}
                 checked={activePhase.checkedItems.includes(activeItem)}
                 onCheckedChange={toggleCurrentItem}
+                disabled={basicsIncomplete}
                 aria-label={`Mark ${activeItem} complete`}
                 className={`size-6.5 rounded-md text-white ${
                   activePhase.checkedItems.includes(activeItem)
@@ -477,6 +516,7 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
                   type="button"
                   variant="outline"
                   onClick={() => toggleKeyword(keyword)}
+                  disabled={basicsIncomplete}
                   className={`h-auto rounded-full px-3 py-1.5 text-[12.5px] font-medium whitespace-nowrap ${
                     selected
                       ? "border-[#18181b] bg-[#18181b] text-white hover:bg-[#18181b] hover:text-white"
@@ -504,11 +544,16 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
             <Button
               size="sm"
               onClick={generate}
-              disabled={generatePhaseText.isPending}
+              disabled={generatePhaseText.isPending || basicsIncomplete}
             >
               {generatePhaseText.isPending ? "Generating…" : "Generate"}
             </Button>
           </div>
+          {generateError && (
+            <p className="mb-2 text-[12.5px] text-destructive">
+              {generateError}
+            </p>
+          )}
           <ScrollArea className="h-[220px] w-full rounded-lg border bg-muted/30">
             <pre className="p-3.5 text-[12.5px] font-mono leading-relaxed text-foreground/80 whitespace-pre-wrap">
               {buildPhaseMarkdown(activePhase)}
@@ -519,7 +564,10 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
             <Button variant="outline" onClick={back} disabled={leaving}>
               {leaving ? "Discarding…" : "Back"}
             </Button>
-            <Button onClick={next} disabled={finalizing || leaving}>
+            <Button
+              onClick={next}
+              disabled={finalizing || leaving || basicsIncomplete}
+            >
               {finalizing ? "Finalizing…" : isLastStep ? "Finish" : "Next"}
             </Button>
           </div>

@@ -28,7 +28,7 @@ public sealed class FinalizeSpecificationHandler(ISpecificationRepository specif
         }
 
         var notes = specification.Phases
-            .Where(p => !string.IsNullOrWhiteSpace(p.GeneratedText))
+            .Where(p => !string.IsNullOrWhiteSpace(p.GeneratedText) && SpecificationPhaseCatalog.Exists(p.PhaseIndex))
             .OrderBy(p => p.PhaseIndex)
             .Select(p => $"{SpecificationPhaseCatalog.ByIndex(p.PhaseIndex).Title}: {p.GeneratedText!.Trim()}");
         var joinedNotes = string.Join('\n', notes);
@@ -58,6 +58,7 @@ public sealed class FinalizeSpecificationHandler(ISpecificationRepository specif
 
         foreach (var phase in specification.Phases.OrderBy(p => p.PhaseIndex))
         {
+            if (!SpecificationPhaseCatalog.Exists(phase.PhaseIndex)) continue;
             var definition = SpecificationPhaseCatalog.ByIndex(phase.PhaseIndex);
             sb.Append("## Phase ").Append(phase.PhaseIndex + 1).Append(" — ").AppendLine(definition.Title);
             sb.AppendLine();

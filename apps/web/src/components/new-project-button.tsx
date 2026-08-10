@@ -8,7 +8,7 @@ export function NewProjectButton() {
 
   function handleClick() {
     createSpecification.mutate(
-      { name: "Untitled Project", summary: "", owner: "You" },
+      { name: "", summary: "", owner: "You" },
       { onSuccess: (spec) => navigate(`/studio/${spec.id}`) },
     );
   }

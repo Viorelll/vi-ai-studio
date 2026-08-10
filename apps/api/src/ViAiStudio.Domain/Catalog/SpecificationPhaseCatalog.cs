@@ -11,40 +11,49 @@ public static class SpecificationPhaseCatalog
 {
     public static IReadOnlyList<SpecificationPhaseDefinition> Phases { get; } =
     [
-        new(0, "Business Design", ["Product Vision", "Business Model", "Stakeholders", "Business Processes"],
-            "Vision document, Business Model Canvas, stakeholder matrix, BPMN diagrams"),
+        // Temporarily reduced to just Requirements for testing -- restore the
+        // rest of the 15 phases by uncommenting them.
+        // new(0, "Business Design", ["Product Vision", "Business Model", "Stakeholders", "Business Processes"],
+        //     "Vision document, Business Model Canvas, stakeholder matrix, BPMN diagrams"),
         new(1, "Requirements", ["Functional Requirements", "Non-functional Requirements"],
             "Requirements Specification, NFR document"),
-        new(2, "Product Design", ["User Roles", "User Stories", "Use Cases", "Acceptance Criteria"],
-            "User stories, use cases & acceptance criteria"),
-        new(3, "Domain Design", ["Entities", "Relationships"],
-            "Domain Model, ER Diagram"),
-        new(4, "Feature Design", ["Authentication", "Catalog", "Cart", "Orders", "Payments", "Notifications", "Reporting", "Administration"],
-            "Module breakdown: features → screens → API → database"),
-        new(5, "UX Design", ["User Journey", "Wireframes"],
-            "UX specification"),
-        new(6, "UI Design", ["Navigation", "Buttons", "Forms", "Tables", "Dialogs", "Responsive behavior", "Dark mode", "Loading states", "Empty states", "Errors"],
-            "Complete UI in Figma"),
-        new(7, "Technical Design", ["Frontend (Next.js)", "API (.NET)", "Application Layer", "Domain Layer", "Infrastructure", "PostgreSQL", "Redis", "Storage"],
-            "Architecture diagrams"),
-        new(8, "Database Design", ["Tables", "Relationships", "Indexes", "Constraints", "Migrations"],
-            "ERD, SQL scripts"),
-        new(9, "API Design", ["POST /auth/login", "GET /products", "GET /products/{id}", "POST /orders", "GET /orders", "POST /payments"],
-            "OpenAPI Specification"),
-        new(10, "Security Design", ["Authentication", "Authorization", "Permissions", "Encryption", "Audit logs", "Rate limiting", "OWASP", "Secrets"],
-            "Security specification"),
-        new(11, "Infrastructure", ["Cloud", "Docker", "Kubernetes", "CI/CD", "Monitoring", "Logging", "Backup", "Disaster Recovery"],
-            "Infrastructure diagrams"),
-        new(12, "Development", ["Frontend", "Backend", "Database", "Infrastructure"],
-            "Working implementation"),
-        new(13, "Quality Assurance", ["Unit tests", "Integration tests", "E2E tests", "Performance tests", "Security tests", "Accessibility tests"],
-            "Test coverage across all layers"),
-        new(14, "Deployment", ["Production", "Monitoring", "Logging", "Metrics", "Alerts", "Health Checks"],
-            "Production deployment with monitoring & alerting"),
+        // new(2, "Product Design", ["User Roles", "User Stories", "Use Cases", "Acceptance Criteria"],
+        //     "User stories, use cases & acceptance criteria"),
+        // new(3, "Domain Design", ["Entities", "Relationships"],
+        //     "Domain Model, ER Diagram"),
+        // new(4, "Feature Design", ["Authentication", "Catalog", "Cart", "Orders", "Payments", "Notifications", "Reporting", "Administration"],
+        //     "Module breakdown: features → screens → API → database"),
+        // new(5, "UX Design", ["User Journey", "Wireframes"],
+        //     "UX specification"),
+        // new(6, "UI Design", ["Navigation", "Buttons", "Forms", "Tables", "Dialogs", "Responsive behavior", "Dark mode", "Loading states", "Empty states", "Errors"],
+        //     "Complete UI in Figma"),
+        // new(7, "Technical Design", ["Frontend (Next.js)", "API (.NET)", "Application Layer", "Domain Layer", "Infrastructure", "PostgreSQL", "Redis", "Storage"],
+        //     "Architecture diagrams"),
+        // new(8, "Database Design", ["Tables", "Relationships", "Indexes", "Constraints", "Migrations"],
+        //     "ERD, SQL scripts"),
+        // new(9, "API Design", ["POST /auth/login", "GET /products", "GET /products/{id}", "POST /orders", "GET /orders", "POST /payments"],
+        //     "OpenAPI Specification"),
+        // new(10, "Security Design", ["Authentication", "Authorization", "Permissions", "Encryption", "Audit logs", "Rate limiting", "OWASP", "Secrets"],
+        //     "Security specification"),
+        // new(11, "Infrastructure", ["Cloud", "Docker", "Kubernetes", "CI/CD", "Monitoring", "Logging", "Backup", "Disaster Recovery"],
+        //     "Infrastructure diagrams"),
+        // new(12, "Development", ["Frontend", "Backend", "Database", "Infrastructure"],
+        //     "Working implementation"),
+        // new(13, "Quality Assurance", ["Unit tests", "Integration tests", "E2E tests", "Performance tests", "Security tests", "Accessibility tests"],
+        //     "Test coverage across all layers"),
+        // new(14, "Deployment", ["Production", "Monitoring", "Logging", "Metrics", "Alerts", "Health Checks"],
+        //     "Production deployment with monitoring & alerting"),
     ];
 
     public static SpecificationPhaseDefinition ByIndex(int index) =>
-        index >= 0 && index < Phases.Count
-            ? Phases[index]
-            : throw new ArgumentOutOfRangeException(nameof(index), index, $"No phase at index {index}; valid range is 0-{Phases.Count - 1}.");
+        Phases.FirstOrDefault(p => p.Index == index)
+            ?? throw new ArgumentOutOfRangeException(nameof(index), index, $"No phase at index {index}.");
+
+    /// <summary>
+    /// True when <paramref name="index"/> is still a phase in <see cref="Phases"/>.
+    /// Lets callers rendering pre-existing <see cref="Entities.SpecificationPhase"/>
+    /// rows quietly skip ones that no longer exist (e.g. phases commented out
+    /// above after a specification was already created) instead of throwing.
+    /// </summary>
+    public static bool Exists(int index) => Phases.Any(p => p.Index == index);
 }

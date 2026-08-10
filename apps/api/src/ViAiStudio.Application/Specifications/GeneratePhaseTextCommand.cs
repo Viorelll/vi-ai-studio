@@ -9,8 +9,11 @@ public sealed record GeneratePhaseTextCommand(Guid SpecificationId, int PhaseInd
 /// <summary>
 /// Drives the wizard's "Generate" button: builds a prompt from the phase
 /// definition plus whatever the user has checked/selected, routes it to the
-/// model configured for <see cref="AiTaskType.SpecGeneration"/>, and stores
-/// the result back on the phase.
+/// model configured for <see cref="AiTaskType.SpecGeneration"/> -- falling
+/// back to whatever is routed for <see cref="AiTaskType.CodeGeneration"/>
+/// (the default coding model) when Spec generation has no routing of its
+/// own, since drafting a spec phase is close enough in kind to reuse it --
+/// and stores the result back on the phase.
 /// </summary>
 public sealed class GeneratePhaseTextHandler(
     ISpecificationRepository specificationRepository,
@@ -29,11 +32,7 @@ public sealed class GeneratePhaseTextHandler(
         var phase = specification.Phases.SingleOrDefault(p => p.PhaseIndex == command.PhaseIndex)
             ?? throw new InvalidOperationException($"Specification '{command.SpecificationId}' has no phase at index {command.PhaseIndex}.");
 
-        var routing = await taskRoutingRepository.GetAsync(AiTaskType.SpecGeneration, cancellationToken);
-        var configId = routing?.AiModelConfigId
-            ?? throw new InvalidOperationException("No model is routed to Spec generation yet. Configure one in Admin → AI model configuration.");
-        var config = await aiModelConfigRepository.GetAsync(configId, cancellationToken)
-            ?? throw new InvalidOperationException($"Routed model configuration '{configId}' no longer exists.");
+        var config = await ResolveModelAsync(cancellationToken);
 
         const string systemPrompt = "You draft one phase of a software project specification as concise markdown.";
         var prompt = BuildPrompt(specification, definition, phase);
@@ -63,14 +62,43 @@ public sealed class GeneratePhaseTextHandler(
         return phase;
     }
 
+    /// <summary>
+    /// Looks up which <see cref="AiModelConfig"/> to call, entirely from the
+    /// database -- AI Generator itself is never asked to make this decision,
+    /// it only ever receives the credentials this resolves to.
+    /// </summary>
+    private async Task<AiModelConfig> ResolveModelAsync(CancellationToken cancellationToken)
+    {
+        var specRouting = await taskRoutingRepository.GetAsync(AiTaskType.SpecGeneration, cancellationToken);
+        var configId = specRouting?.AiModelConfigId;
+
+        if (configId is null)
+        {
+            var codeRouting = await taskRoutingRepository.GetAsync(AiTaskType.CodeGeneration, cancellationToken);
+            configId = codeRouting?.AiModelConfigId;
+        }
+
+        if (configId is null)
+        {
+            throw new InvalidOperationException(
+                "No model is routed to Spec generation or Code generation yet. Configure one in Admin → AI model configuration.");
+        }
+
+        return await aiModelConfigRepository.GetAsync(configId.Value, cancellationToken)
+            ?? throw new InvalidOperationException($"Routed model configuration '{configId}' no longer exists.");
+    }
+
     private static string BuildPrompt(Specification specification, SpecificationPhaseDefinition definition, SpecificationPhase phase)
     {
-        var lines = new List<string>
-        {
-            $"Project: {specification.Name}",
-            $"Phase {definition.Index + 1} of {SpecificationPhaseCatalog.Phases.Count} — {definition.Title}",
-            $"Produces: {definition.Output}",
-        };
+        var lines = new List<string> { $"Project: {specification.Name}" };
+        if (!string.IsNullOrWhiteSpace(specification.Summary)) lines.Add($"Summary: {specification.Summary}");
+        if (!string.IsNullOrWhiteSpace(specification.Description)) lines.Add($"Description: {specification.Description}");
+        if (!string.IsNullOrWhiteSpace(specification.Features)) lines.Add($"Requirements & features: {specification.Features}");
+        if (!string.IsNullOrWhiteSpace(specification.Audience)) lines.Add($"Audience: {specification.Audience}");
+        var stack = specification.Stack;
+        lines.Add($"Stack: {stack.Backend}, {stack.Ui}, {stack.Database}, {stack.Infra}, {stack.UiStyle}");
+        lines.Add($"Phase {definition.Index + 1} of {SpecificationPhaseCatalog.Phases.Count} — {definition.Title}");
+        lines.Add($"Produces: {definition.Output}");
         if (phase.CheckedItems.Count > 0) lines.Add("Checklist items covered: " + string.Join(", ", phase.CheckedItems));
         if (phase.SelectedKeywords.Count > 0) lines.Add("Keywords: " + string.Join(", ", phase.SelectedKeywords));
         return string.Join('\n', lines);

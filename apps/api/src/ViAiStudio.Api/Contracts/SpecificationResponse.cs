@@ -1,3 +1,4 @@
+using ViAiStudio.Domain.Catalog;
 using ViAiStudio.Domain.Entities;
 
 namespace ViAiStudio.Api.Contracts;
@@ -64,6 +65,10 @@ public sealed record SpecificationDetailResponse(
         specification.Progress,
         TechStackResponse.FromValue(specification.Stack),
         specification.SpecMarkdown,
-        specification.Phases.OrderBy(p => p.PhaseIndex).Select(SpecificationPhaseResponse.FromEntity).ToList(),
+        specification.Phases
+            .Where(p => SpecificationPhaseCatalog.Exists(p.PhaseIndex))
+            .OrderBy(p => p.PhaseIndex)
+            .Select(SpecificationPhaseResponse.FromEntity)
+            .ToList(),
         specification.Generations.OrderByDescending(g => g.Version).Select(GenerationSummaryResponse.FromEntity).ToList());
 }
