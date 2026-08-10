@@ -38,7 +38,7 @@ export function VersionFilesPage() {
 
   return (
     <main className="flex-1 flex justify-center px-7 py-10">
-      <div className="w-full max-w-[820px]">
+      <div className="flex h-[calc(100vh-3.5rem-5rem)] w-full max-w-[820px] flex-col">
         <PageBreadcrumb
           items={[
             { label: "Generated Projects", href: "/generated" },
@@ -70,7 +70,7 @@ export function VersionFilesPage() {
           </div>
         </div>
 
-        <Card className="rounded-[12px] p-0 overflow-hidden">
+        <Card className="flex min-h-0 flex-1 flex-col rounded-[12px] p-0 overflow-hidden">
           <CardHeader className="flex items-center gap-2 rounded-none border-b bg-[#fafafa] px-5 py-3 text-xs font-semibold text-muted-foreground">
             <FolderIcon className="size-3.5" />
             Generated project files
@@ -79,6 +79,7 @@ export function VersionFilesPage() {
             paths={generation.fileTree}
             bordered={false}
             variant="generated"
+            className="min-h-0 flex-1"
           />
         </Card>
       </div>

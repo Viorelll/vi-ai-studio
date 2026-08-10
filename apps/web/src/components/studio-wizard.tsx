@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { XIcon, CheckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { KEYWORD_BANK } from "@/lib/keyword-bank";
 import { buildPhaseMarkdown } from "@/lib/wizard-markdown";
 import {
+  useDeleteSpecification,
   useFinalizeSpecification,
   useGeneratePhaseText,
   useSaveSpecificationPhase,
@@ -95,6 +96,7 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
   const savePhase = useSaveSpecificationPhase(spec.id);
   const generatePhaseText = useGeneratePhaseText(spec.id);
   const finalizeSpecification = useFinalizeSpecification(spec.id);
+  const deleteSpecification = useDeleteSpecification();
 
   const [name, setName] = useState(spec.name);
   const [summary, setSummary] = useState(spec.summary);
@@ -105,6 +107,54 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
   const [activePhaseIndex, setActivePhaseIndex] = useState(0);
   const [activeItemIndex, setActiveItemIndex] = useState(0);
   const [finalizing, setFinalizing] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+
+  const isUntitled = name.trim() === "" || name.trim() === "Untitled Project";
+  const nameRef = useRef(name);
+  nameRef.current = name;
+  const handledLeaveRef = useRef(false);
+  const discardTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function leaveStudio(destination: string, untitledDestination = destination) {
+    if (!isUntitled) {
+      navigate(destination);
+      return;
+    }
+    handledLeaveRef.current = true;
+    setLeaving(true);
+    try {
+      await deleteSpecification.mutateAsync(spec.id);
+      navigate(untitledDestination);
+    } catch {
+      handledLeaveRef.current = false;
+      navigate(destination);
+    } finally {
+      setLeaving(false);
+    }
+  }
+
+  // Catches every other way of leaving the wizard (header/nav links, browser
+  // back/forward, sign-out) that don't go through leaveStudio() above. The
+  // setTimeout + clear-on-remount dance is needed because React StrictMode
+  // double-invokes this effect (mount -> cleanup -> mount) in development;
+  // without it, the freshly-created spec gets deleted immediately after
+  // "New Project" is clicked.
+  useEffect(() => {
+    if (discardTimeoutRef.current !== null) {
+      clearTimeout(discardTimeoutRef.current);
+      discardTimeoutRef.current = null;
+    }
+    return () => {
+      if (handledLeaveRef.current) return;
+      discardTimeoutRef.current = setTimeout(() => {
+        const current = nameRef.current.trim();
+        if (current === "" || current === "Untitled Project") {
+          deleteSpecification.mutate(spec.id);
+        }
+      }, 0);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const activePhase = phases[activePhaseIndex];
   const activeItem = activePhase.items[activeItemIndex] as string | undefined;
@@ -184,7 +234,7 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
       return;
     }
     if (activePhaseIndex === 0) {
-      navigate(`/specifications/${spec.id}`);
+      await leaveStudio(`/specifications/${spec.id}`, "/specifications");
       return;
     }
     const prevIndex = activePhaseIndex - 1;
@@ -230,7 +280,8 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => navigate("/")}
+                onClick={() => leaveStudio("/")}
+                disabled={leaving}
                 aria-label="Discard changes and return home"
               >
                 <XIcon />
@@ -465,10 +516,10 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
           </ScrollArea>
 
           <div className="flex justify-between mt-6">
-            <Button variant="outline" onClick={back}>
-              Back
+            <Button variant="outline" onClick={back} disabled={leaving}>
+              {leaving ? "Discarding…" : "Back"}
             </Button>
-            <Button onClick={next} disabled={finalizing}>
+            <Button onClick={next} disabled={finalizing || leaving}>
               {finalizing ? "Finalizing…" : isLastStep ? "Finish" : "Next"}
             </Button>
           </div>

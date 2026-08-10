@@ -1,5 +1,6 @@
 import { FolderIcon, FileIcon } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
 interface FileTreeRow {
   key: string;
@@ -44,16 +45,22 @@ export function FileTree({
   paths,
   bordered = true,
   variant = "specification",
+  className,
 }: {
   paths: string[];
   bordered?: boolean;
   variant?: "specification" | "generated";
+  className?: string;
 }) {
   const rows = buildRows(paths);
   const isGenerated = variant === "generated";
   return (
     <ScrollArea
-      className={`max-h-[340px] overflow-hidden ${bordered ? "rounded-lg border bg-card" : ""}`}
+      className={cn(
+        "overflow-hidden",
+        className ?? "max-h-85",
+        bordered && "rounded-lg border bg-card",
+      )}
     >
       {rows.map((row) => (
         <div

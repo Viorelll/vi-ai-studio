@@ -61,6 +61,16 @@ export function useGeneratePhaseText(specId: string) {
   });
 }
 
+export function useDeleteSpecification() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/api/specifications/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["specifications"] });
+    },
+  });
+}
+
 export function useFinalizeSpecification(specId: string) {
   const queryClient = useQueryClient();
   return useMutation({

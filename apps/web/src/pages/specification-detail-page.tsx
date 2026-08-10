@@ -1,14 +1,26 @@
-import type { ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
+import { type ReactNode, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { CircleAlertIcon, FolderIcon, Trash2Icon } from "lucide-react";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { DownloadButton } from "@/components/download-button";
 import { FileTree } from "@/components/file-tree";
 import { PageLoading } from "@/components/page-loading";
 import { NotFoundView } from "@/components/not-found-view";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
-import { buttonVariants } from "@/components/ui/button";
-import { useSpecification } from "@/hooks/use-specifications";
+import { Card, CardHeader } from "@/components/ui/card";
+import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useDeleteSpecification, useSpecification } from "@/hooks/use-specifications";
 import { SPEC_DOC_PATHS } from "@/lib/spec-doc-paths";
 import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
@@ -17,7 +29,10 @@ import { cn } from "@/lib/utils";
 
 export function SpecificationDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const specQuery = useSpecification(id);
+  const deleteSpecification = useDeleteSpecification();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   if (specQuery.isPending) return <PageLoading />;
   if (specQuery.isError) {
@@ -27,6 +42,13 @@ export function SpecificationDetailPage() {
     throw specQuery.error;
   }
   const spec = specQuery.data;
+
+  function confirmDelete() {
+    if (!id) return;
+    deleteSpecification.mutate(id, {
+      onSuccess: () => navigate("/specifications"),
+    });
+  }
 
   const stackChips = [
     spec.stack.backend,
@@ -39,7 +61,7 @@ export function SpecificationDetailPage() {
 
   return (
     <main className="flex-1 flex justify-center px-7 py-10">
-      <div className="w-full max-w-[820px]">
+      <div className="flex h-[calc(100vh-3.5rem-5rem)] w-full max-w-[820px] flex-col">
         <PageBreadcrumb
           items={[
             { label: "Project Specifications", href: "/specifications" },
@@ -49,12 +71,24 @@ export function SpecificationDetailPage() {
 
         <div className="flex items-start justify-between gap-3 mb-1.5">
           <h1 className="text-[22px] font-bold tracking-tight">{spec.name}</h1>
-          <Badge
-            variant="outline"
-            className={getStatusBadgeClassName(spec.status)}
-          >
-            {getStatusLabel(spec.status)}
-          </Badge>
+          <div className="flex items-center gap-2 shrink-0">
+            <Badge
+              variant="outline"
+              className={getStatusBadgeClassName(spec.status)}
+            >
+              {getStatusLabel(spec.status)}
+            </Badge>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setConfirmingDelete(true)}
+            >
+              <Trash2Icon />
+              Delete
+            </Button>
+          </div>
         </div>
         <p className="text-sm text-muted-foreground mb-7">
           {spec.summary || "No summary provided."}
@@ -67,7 +101,7 @@ export function SpecificationDetailPage() {
           <MetaTile label="Audience" value={spec.audience || "Not specified"} />
         </div>
 
-        <Card className="rounded-[12px] p-6 gap-5">
+        <Card className="rounded-[12px] p-6 gap-5 mb-5 shrink-0">
           <Section title="Description">
             <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
               {spec.description || "No description yet."}
@@ -89,30 +123,32 @@ export function SpecificationDetailPage() {
               ))}
             </div>
           </Section>
-
-          <Section
-            title={
-              <span className="flex items-center justify-between">
-                <span>
-                  Specifications (.md){" "}
-                  <span className="font-normal text-muted-foreground">
-                    · {SPEC_DOC_PATHS.length} files
-                  </span>
-                </span>
-                <DownloadButton
-                  path={`/api/specifications/${spec.id}/download`}
-                  filename={`${spec.name}-specification.zip`}
-                  variant="outline"
-                  size="sm"
-                />
-              </span>
-            }
-          >
-            <FileTree paths={SPEC_DOC_PATHS} />
-          </Section>
         </Card>
 
-        <div className="flex justify-end mt-6">
+        <Card className="flex min-h-0 flex-1 flex-col rounded-[12px] p-0 overflow-hidden">
+          <CardHeader className="flex items-center justify-between gap-2 rounded-none border-b bg-[#fafafa] px-5 py-3 text-xs font-semibold text-muted-foreground">
+            <span className="flex items-center gap-2">
+              <FolderIcon className="size-3.5" />
+              Specifications (.md)
+              <span className="font-normal">
+                · {SPEC_DOC_PATHS.length} files
+              </span>
+            </span>
+            <DownloadButton
+              path={`/api/specifications/${spec.id}/download`}
+              filename={`${spec.name}-specification.zip`}
+              variant="outline"
+              size="sm"
+            />
+          </CardHeader>
+          <FileTree
+            paths={SPEC_DOC_PATHS}
+            bordered={false}
+            className="min-h-0 flex-1"
+          />
+        </Card>
+
+        <div className="flex shrink-0 justify-end mt-6">
           {canEdit && !isFinalized && (
             <Link to={`/studio/${spec.id}`} className={cn(buttonVariants())}>
               Continue in Studio
@@ -152,6 +188,38 @@ export function SpecificationDetailPage() {
           )}
         </div>
       </div>
+
+      <AlertDialog
+        open={confirmingDelete}
+        onOpenChange={(open) => {
+          if (!open && !deleteSpecification.isPending) setConfirmingDelete(false);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <CircleAlertIcon />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Delete specification?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes {spec.name} and all of its phases. This
+              can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteSpecification.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleteSpecification.isPending}
+              onClick={confirmDelete}
+            >
+              {deleteSpecification.isPending ? "Deleting…" : "Delete specification"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 }
