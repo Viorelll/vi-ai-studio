@@ -4,8 +4,20 @@
 
 export type SpecificationStatus = "draft" | "building" | "ready" | "failed";
 export type GenerationStatus = "running" | "ready" | "failed";
-export type AiProvider = "openAi" | "anthropic" | "google" | "mistral" | "elevenLabs" | "azureOpenAi" | "custom";
-export type AiTaskType = "specGeneration" | "codeGeneration" | "imageGeneration" | "soundGeneration" | "transcribing";
+export type AiProvider =
+  | "openAi"
+  | "anthropic"
+  | "google"
+  | "mistral"
+  | "elevenLabs"
+  | "azureOpenAi"
+  | "custom";
+export type AiTaskType =
+  | "specGeneration"
+  | "codeGeneration"
+  | "imageGeneration"
+  | "soundGeneration"
+  | "transcribing";
 
 export interface TechStack {
   backend: string;
@@ -86,13 +98,6 @@ export interface AiModelConfig {
 export interface TaskRouting {
   task: AiTaskType;
   aiModelConfigId: string | null;
-}
-
-export interface ServiceHealth {
-  name: string;
-  online: boolean;
-  endpoint: string;
-  description: string;
 }
 
 export interface GenerationDetail {

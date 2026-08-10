@@ -1,14 +1,23 @@
 import { Link } from "react-router-dom";
-import { StatusBadge } from "@/components/status-badge";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { NewProjectButton } from "@/components/new-project-button";
 import { PageLoading } from "@/components/page-loading";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { buttonVariants } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useSpecifications } from "@/hooks/use-specifications";
+import { formatDate } from "@/lib/format";
+import { getStatusBadgeClassName, getStatusLabel } from "@/lib/status";
 import { cn } from "@/lib/utils";
 
 export function SpecificationsListPage() {
@@ -21,9 +30,11 @@ export function SpecificationsListPage() {
       <div className="w-full max-w-[1220px]">
         <PageBreadcrumb items={[{ label: "Project Specifications" }]} />
 
-        <div className="flex items-start justify-between mb-7">
+        <div className="flex flex-wrap items-start justify-between gap-5 mb-7">
           <div>
-            <h1 className="text-[22px] font-bold tracking-tight">Project Specifications</h1>
+            <h1 className="text-[22px] font-bold tracking-tight">
+              Project Specifications
+            </h1>
             <p className="text-sm text-muted-foreground mt-1">
               Author a spec, then let AI Build turn it into a running project.
             </p>
@@ -31,70 +42,123 @@ export function SpecificationsListPage() {
           <NewProjectButton />
         </div>
 
-        <Card className="p-0 overflow-hidden">
-          <Table>
+        <Card className="rounded-[12px] bg-white p-0 overflow-hidden ring-1 ring-[#e4e4e7]">
+          <Table className="table-fixed min-w-[980px]">
+            <colgroup>
+              <col style={{ width: "23.95%" }} />
+              <col style={{ width: "10.18%" }} />
+              <col style={{ width: "10.78%" }} />
+              <col style={{ width: "9.58%" }} />
+              <col style={{ width: "11.98%" }} />
+              <col style={{ width: "19.16%" }} />
+              <col style={{ width: "14.37%" }} />
+            </colgroup>
             <TableHeader>
-              <TableRow>
-                <TableHead>Project</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Owner</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Progress</TableHead>
-                <TableHead>Stack</TableHead>
-                <TableHead className="text-right"></TableHead>
+              <TableRow className="border-b border-[#e4e4e7] bg-[#fafafa] hover:bg-[#fafafa]">
+                <TableHead className="h-auto px-5 py-3 text-[12px] font-semibold text-[#71717a]">
+                  Project
+                </TableHead>
+                <TableHead className="h-auto px-5 py-3 text-[12px] font-semibold text-[#71717a]">
+                  Status
+                </TableHead>
+                <TableHead className="h-auto px-5 py-3 text-[12px] font-semibold text-[#71717a]">
+                  Owner
+                </TableHead>
+                <TableHead className="h-auto px-5 py-3 text-[12px] font-semibold text-[#71717a]">
+                  Created
+                </TableHead>
+                <TableHead className="h-auto px-5 py-3 text-[12px] font-semibold text-[#71717a]">
+                  Progress
+                </TableHead>
+                <TableHead className="h-auto px-5 py-3 text-[12px] font-semibold text-[#71717a]">
+                  Stack
+                </TableHead>
+                <TableHead className="h-auto px-5 py-3 text-right text-[12px] font-semibold text-[#71717a]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {specs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
-                    No specifications yet.
+                  <TableCell colSpan={7} className="py-10">
+                    <Empty className="min-h-0 border-0 p-0">
+                      <EmptyDescription>
+                        No specifications yet.
+                      </EmptyDescription>
+                    </Empty>
                   </TableCell>
                 </TableRow>
               ) : (
                 specs.map((spec) => (
-                  <TableRow key={spec.id}>
-                    <TableCell>
-                      <Link to={`/specifications/${spec.id}`} className="font-semibold hover:underline">
+                  <TableRow
+                    key={spec.id}
+                    className="border-b border-[#f0f0f1] hover:bg-[#fafafa]"
+                  >
+                    <TableCell className="min-w-0 px-5 py-4">
+                      <Link
+                        to={`/specifications/${spec.id}`}
+                        className="block truncate text-[14px] font-semibold hover:underline"
+                      >
                         {spec.name}
                       </Link>
-                      <div className="text-xs text-muted-foreground">{spec.summary}</div>
+                      <div className="mt-0.5 truncate text-[12px] text-zinc-400">
+                        {spec.summary}
+                      </div>
                     </TableCell>
-                    <TableCell>
-                      <StatusBadge status={spec.status} />
+                    <TableCell className="px-5 py-4">
+                      <Badge
+                        variant="outline"
+                        className={getStatusBadgeClassName(spec.status)}
+                      >
+                        {getStatusLabel(spec.status)}
+                      </Badge>
                     </TableCell>
-                    <TableCell className="text-sm">{spec.owner}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {new Date(spec.created).toLocaleDateString("en-US")}
+                    <TableCell className="px-5 py-4 text-[13px] text-[#3f3f46]">
+                      {spec.owner}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-nowrap px-5 py-4 text-[13px] text-[#71717a]">
+                      {formatDate(spec.created)}
+                    </TableCell>
+                    <TableCell className="px-5 py-4">
                       <div className="flex items-center gap-2">
                         <Progress
                           value={spec.progress}
                           className={cn(
-                            "w-16 h-1.5",
+                            "h-1.5 w-[60px] shrink-0",
                             spec.status === "failed"
                               ? "[&_[data-slot=progress-indicator]]:bg-red-600"
                               : spec.status === "ready"
                                 ? "[&_[data-slot=progress-indicator]]:bg-green-600"
-                                : "[&_[data-slot=progress-indicator]]:bg-zinc-900"
+                                : "[&_[data-slot=progress-indicator]]:bg-zinc-900",
                           )}
                         />
-                        <span className="text-xs text-muted-foreground">{spec.progress}%</span>
+                        <span className="whitespace-nowrap text-[12px] text-[#71717a]">
+                          {spec.progress}%
+                        </span>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1.5 flex-wrap items-center">
+                    <TableCell className="min-w-0 px-5 py-4">
+                      <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden">
                         {(() => {
-                          const stack = [spec.stack.backend, spec.stack.ui, spec.stack.database, spec.stack.infra];
+                          const stack = [
+                            spec.stack.backend,
+                            spec.stack.ui,
+                            spec.stack.database,
+                            spec.stack.infra,
+                          ];
                           const [first, ...rest] = stack;
                           return (
                             <>
-                              <Badge variant="secondary" className="font-normal">
+                              <Badge
+                                variant="secondary"
+                                className="max-w-[110px] truncate rounded-md border border-[#e4e4e7] bg-[#f4f4f5] px-2 py-0.5 text-[11px] font-normal text-[#3f3f46]"
+                              >
                                 {first}
                               </Badge>
                               {rest.length > 0 && (
-                                <Badge variant="outline" className="font-normal text-muted-foreground">
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-md border-[#e4e4e7] bg-white px-2 py-0.5 text-[11px] font-normal text-zinc-400"
+                                >
                                   +{rest.length}
                                 </Badge>
                               )}
@@ -103,17 +167,23 @@ export function SpecificationsListPage() {
                         })()}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="px-5 py-4 text-right">
                       {spec.status === "draft" ? (
                         <Link
                           to={`/specifications/${spec.id}/launch`}
-                          className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                          className={cn(
+                            buttonVariants({ variant: "outline", size: "sm" }),
+                            "h-7 rounded-md px-2.5 text-[12px] font-semibold",
+                          )}
                         >
                           Start Studio
                         </Link>
                       ) : (
                         <span
-                          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "opacity-45 cursor-not-allowed pointer-events-none")}
+                          className={cn(
+                            buttonVariants({ variant: "outline", size: "sm" }),
+                            "opacity-45 cursor-not-allowed pointer-events-none",
+                          )}
                         >
                           Start Studio
                         </span>

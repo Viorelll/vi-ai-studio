@@ -191,6 +191,27 @@ namespace ViAiStudio.Infrastructure.Persistence.Migrations
                     b.ToTable("Generations");
                 });
 
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.Role", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Roles");
+                });
+
             modelBuilder.Entity("ViAiStudio.Domain.Entities.Specification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -323,6 +344,77 @@ namespace ViAiStudio.Infrastructure.Persistence.Migrations
                     b.ToTable("TaskRoutings");
                 });
 
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.User", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.UserProfile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AvatarUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("UserProfiles");
+                });
+
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.UserRole", b =>
+                {
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("UserId", "RoleId");
+
+                    b.HasIndex("RoleId");
+
+                    b.ToTable("UserRoles");
+                });
+
             modelBuilder.Entity("ViAiStudio.Domain.Entities.AiCallLog", b =>
                 {
                     b.HasOne("ViAiStudio.Domain.Entities.Specification", null)
@@ -358,11 +450,53 @@ namespace ViAiStudio.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
                 });
 
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.UserProfile", b =>
+                {
+                    b.HasOne("ViAiStudio.Domain.Entities.User", "User")
+                        .WithOne("Profile")
+                        .HasForeignKey("ViAiStudio.Domain.Entities.UserProfile", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.UserRole", b =>
+                {
+                    b.HasOne("ViAiStudio.Domain.Entities.Role", "Role")
+                        .WithMany("UserRoles")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ViAiStudio.Domain.Entities.User", "User")
+                        .WithMany("UserRoles")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Role");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.Role", b =>
+                {
+                    b.Navigation("UserRoles");
+                });
+
             modelBuilder.Entity("ViAiStudio.Domain.Entities.Specification", b =>
                 {
                     b.Navigation("Generations");
 
                     b.Navigation("Phases");
+                });
+
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.User", b =>
+                {
+                    b.Navigation("Profile");
+
+                    b.Navigation("UserRoles");
                 });
 #pragma warning restore 612, 618
         }

@@ -14,8 +14,13 @@ export function NewProjectButton() {
   }
 
   return (
-    <Button onClick={handleClick} disabled={createSpecification.isPending} className="gap-2">
-      <span className="text-base leading-none">+</span> {createSpecification.isPending ? "Creating…" : "New Project"}
+    <Button
+      onClick={handleClick}
+      disabled={createSpecification.isPending}
+      className="h-9 rounded-lg px-4 text-[13px]"
+    >
+      <span className="text-base leading-none">+</span>{" "}
+      {createSpecification.isPending ? "Creating…" : "New Project"}
     </Button>
   );
 }

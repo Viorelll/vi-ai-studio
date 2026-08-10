@@ -1,12 +1,48 @@
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import type { AiModelConfig, ServiceHealth, TaskRouting } from "@/lib/types";
+import type { AiModelConfig, TaskRouting } from "@/lib/types";
 
-export function useServices() {
-  return useQuery({
-    queryKey: ["services"],
-    queryFn: () => apiClient.get<ServiceHealth[]>("/api/admin/services"),
-  });
+export function useServiceStatuses(
+  services: readonly { name: string; endpoint: string; mode?: RequestMode }[],
+) {
+  const [statuses, setStatuses] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    let disposed = false;
+
+    const checkServices = async () => {
+      const results = await Promise.all(
+        services.map(async (service) => {
+          try {
+            const response = await fetch(service.endpoint, {
+              cache: "no-store",
+              mode: service.mode ?? "cors",
+              signal: AbortSignal.timeout(3000),
+            });
+            return [
+              service.name,
+              response.ok || response.type === "opaque",
+            ] as const;
+          } catch {
+            return [service.name, false] as const;
+          }
+        }),
+      );
+
+      if (!disposed) {
+        setStatuses(Object.fromEntries(results));
+      }
+    };
+
+    void checkServices();
+
+    return () => {
+      disposed = true;
+    };
+  }, [services]);
+
+  return statuses;
 }
 
 export function useAiConfigs() {
@@ -34,7 +70,8 @@ export interface AiConfigFormInput {
 export function useCreateAiConfig() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: AiConfigFormInput) => apiClient.post<AiModelConfig>("/api/admin/ai-configs", input),
+    mutationFn: (input: AiConfigFormInput) =>
+      apiClient.post<AiModelConfig>("/api/admin/ai-configs", input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["aiConfigs"] }),
   });
 }
@@ -61,15 +98,25 @@ export function useDeleteAiConfig() {
 
 export function useRevealAiConfigKey() {
   return useMutation({
-    mutationFn: (id: string) => apiClient.get<{ apiKey: string }>(`/api/admin/ai-configs/${id}/reveal`),
+    mutationFn: (id: string) =>
+      apiClient.get<{ apiKey: string }>(`/api/admin/ai-configs/${id}/reveal`),
   });
 }
 
 export function useUpdateTaskRouting() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ task, aiModelConfigId }: { task: string; aiModelConfigId: string | null }) =>
-      apiClient.put<TaskRouting>(`/api/admin/task-routing/${task}`, { aiModelConfigId }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["taskRouting"] }),
+    mutationFn: ({
+      task,
+      aiModelConfigId,
+    }: {
+      task: string;
+      aiModelConfigId: string | null;
+    }) =>
+      apiClient.put<TaskRouting>(`/api/admin/task-routing/${task}`, {
+        aiModelConfigId,
+      }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["taskRouting"] }),
   });
 }

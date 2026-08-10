@@ -7,7 +7,8 @@ public static class AuditEndpoints
 {
     public static void MapAuditEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/admin/audit");
+        var group = app.MapGroup("/api/admin/audit")
+            .RequireAuthorization(policy => policy.RequireRole("Admin"));
 
         group.MapGet("/specifications", async (IAiCallLogRepository repository, CancellationToken cancellationToken) =>
         {

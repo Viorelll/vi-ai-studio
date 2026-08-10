@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using ViAiStudio.Application.Common;
 using ViAiStudio.Infrastructure.AiGenerator;
-using ViAiStudio.Infrastructure.Health;
+using ViAiStudio.Infrastructure.Auth;
 using ViAiStudio.Infrastructure.Persistence;
 using ViAiStudio.Infrastructure.Storage;
 
@@ -24,6 +24,12 @@ public static class DependencyInjection
         services.AddScoped<IAiModelConfigRepository, AiModelConfigRepository>();
         services.AddScoped<ITaskRoutingRepository, TaskRoutingRepository>();
         services.AddScoped<IAiCallLogRepository, AiCallLogRepository>();
+        services.AddScoped<IUserRepository, UserRepository>();
+
+        services.Configure<GoogleOptions>(configuration.GetSection("Auth:Google"));
+        services.Configure<JwtOptions>(configuration.GetSection("Auth:Jwt"));
+        services.AddScoped<IGoogleIdTokenValidator, GoogleIdTokenValidator>();
+        services.AddScoped<IJwtTokenService, JwtTokenService>();
 
         services.Configure<MinioStorageOptions>(configuration.GetSection("Storage"));
         services.AddSingleton<IAmazonS3>(sp =>
@@ -42,10 +48,6 @@ public static class DependencyInjection
 
         var aiGeneratorBaseUrl = configuration["AiGenerator:BaseUrl"]!;
         services.AddHttpClient<IAiGeneratorClient, AiGeneratorHttpClient>(client =>
-        {
-            client.BaseAddress = new Uri(aiGeneratorBaseUrl);
-        });
-        services.AddHttpClient<IServiceHealthChecker, ServiceHealthChecker>(client =>
         {
             client.BaseAddress = new Uri(aiGeneratorBaseUrl);
         });

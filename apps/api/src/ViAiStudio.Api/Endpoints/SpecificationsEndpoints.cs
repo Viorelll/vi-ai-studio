@@ -13,9 +13,10 @@ public static class SpecificationsEndpoints
     public static void MapSpecificationsEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/specification-phase-catalog", () =>
-            Results.Ok(SpecificationPhaseCatalog.Phases.Select(SpecificationPhaseDefinitionResponse.FromDefinition)));
+            Results.Ok(SpecificationPhaseCatalog.Phases.Select(SpecificationPhaseDefinitionResponse.FromDefinition)))
+            .RequireAuthorization();
 
-        var group = app.MapGroup("/api/specifications");
+        var group = app.MapGroup("/api/specifications").RequireAuthorization();
 
         group.MapGet("/", async (ISpecificationRepository repository, CancellationToken cancellationToken) =>
         {

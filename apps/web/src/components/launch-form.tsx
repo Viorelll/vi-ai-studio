@@ -2,10 +2,19 @@ import { useNavigate } from "react-router-dom";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { CircleAlertIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useStartBuild } from "@/hooks/use-builds";
 import type { AiModelConfig, TechStack } from "@/lib/types";
 
@@ -39,45 +48,83 @@ export function LaunchForm({
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="rounded-2xl border bg-card p-6.5">
-      <Label className="text-[12.5px] font-semibold mb-2">Coding model</Label>
-      <Controller
-        control={control}
-        name="modelId"
-        render={({ field }) => (
-          <Select value={field.value} onValueChange={(value) => field.onChange(value ?? "")}>
-            <SelectTrigger className="w-full mb-5.5">
-              <SelectValue placeholder="Select a model">
-                {() => {
-                  const selected = configs.find((config) => config.id === field.value);
-                  return selected ? `${selected.label} (${selected.provider})` : "Select a model";
-                }}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {configs.map((config) => (
-                <SelectItem key={config.id} value={config.id}>
-                  {config.label} ({config.provider})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+    <Card className="gap-0 rounded-[14px] bg-white p-0">
+      <form onSubmit={handleSubmit(onSubmit)} className="p-6.5">
+        <Field className="mb-5.5 gap-2">
+          <FieldLabel
+            htmlFor="launch-model"
+            className="text-[12.5px] font-semibold"
+          >
+            Coding model
+          </FieldLabel>
+          <Controller
+            control={control}
+            name="modelId"
+            render={({ field }) => (
+              <Select
+                value={field.value}
+                onValueChange={(value) => field.onChange(value ?? "")}
+              >
+                <SelectTrigger
+                  id="launch-model"
+                  className="h-11 w-full rounded-lg border-[#e4e4e7] text-sm"
+                >
+                  <SelectValue placeholder="Select a model">
+                    {() => {
+                      const selected = configs.find(
+                        (config) => config.id === field.value,
+                      );
+                      return selected
+                        ? `${selected.label} (${selected.provider})`
+                        : "Select a model";
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {configs.map((config) => (
+                    <SelectItem key={config.id} value={config.id}>
+                      {config.label} ({config.provider})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
+        </Field>
+
+        <div className="flex gap-1.5 flex-wrap mb-6.5">
+          {[stack.backend, stack.ui, stack.database, stack.infra].map(
+            (tech) => (
+              <Badge
+                key={tech}
+                variant="secondary"
+                className="rounded-md border-[#e4e4e7] bg-[#f4f4f5] px-2 py-0.5 text-[12px] font-normal text-[#3f3f46]"
+              >
+                {tech}
+              </Badge>
+            ),
+          )}
+        </div>
+
+        {startBuild.isError && (
+          <Alert variant="destructive" className="mb-4">
+            <CircleAlertIcon />
+            <AlertTitle>Unable to start AI Build</AlertTitle>
+            <AlertDescription>
+              Failed to start the build. Check the selected model configuration
+              and try again.
+            </AlertDescription>
+          </Alert>
         )}
-      />
 
-      <div className="flex gap-1.5 flex-wrap mb-6.5">
-        {[stack.backend, stack.ui, stack.database, stack.infra].map((tech) => (
-          <Badge key={tech} variant="secondary" className="font-normal">
-            {tech}
-          </Badge>
-        ))}
-      </div>
-
-      {startBuild.isError && <p className="text-sm text-destructive mb-4">Failed to start the build.</p>}
-
-      <Button type="submit" className="w-full" disabled={startBuild.isPending || !modelId}>
-        {startBuild.isPending ? "Starting…" : "Generate"}
-      </Button>
-    </form>
+        <Button
+          type="submit"
+          className="h-10 w-full rounded-lg text-sm font-bold"
+          disabled={startBuild.isPending || !modelId}
+        >
+          {startBuild.isPending ? "Starting…" : "Generate"}
+        </Button>
+      </form>
+    </Card>
   );
 }

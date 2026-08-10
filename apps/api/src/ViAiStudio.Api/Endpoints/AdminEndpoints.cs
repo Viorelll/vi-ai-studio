@@ -9,7 +9,8 @@ public static class AdminEndpoints
 {
     public static void MapAdminEndpoints(this IEndpointRouteBuilder app)
     {
-        var configs = app.MapGroup("/api/admin/ai-configs");
+        var configs = app.MapGroup("/api/admin/ai-configs")
+            .RequireAuthorization(policy => policy.RequireRole("Admin"));
 
         configs.MapGet("/", async (IAiModelConfigRepository repository, CancellationToken cancellationToken) =>
         {
@@ -43,7 +44,8 @@ public static class AdminEndpoints
             return config is not null ? Results.Ok(new { apiKey = config.ApiKey }) : Results.NotFound();
         });
 
-        var routing = app.MapGroup("/api/admin/task-routing");
+        var routing = app.MapGroup("/api/admin/task-routing")
+            .RequireAuthorization(policy => policy.RequireRole("Admin"));
 
         routing.MapGet("/", async (ITaskRoutingRepository repository, CancellationToken cancellationToken) =>
         {
@@ -66,10 +68,5 @@ public static class AdminEndpoints
             return Results.Ok(TaskRoutingResponse.FromEntity(updated));
         });
 
-        app.MapGet("/api/admin/services", async (IServiceHealthChecker checker, CancellationToken cancellationToken) =>
-        {
-            var health = await checker.CheckAllAsync(cancellationToken);
-            return Results.Ok(health.Select(ServiceHealthResponse.FromModel));
-        });
     }
 }

@@ -3,7 +3,18 @@ import { useNavigate } from "react-router-dom";
 import { CheckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { API_BASE_URL } from "@/lib/api-client";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Timeline,
+  TimelineConnector,
+  TimelineContent,
+  TimelineIndicator,
+  TimelineItem,
+  TimelineRail,
+} from "@/components/ui/timeline";
+import { API_BASE_URL, getAuthHeaders } from "@/lib/api-client";
+import { clearAuth } from "@/api/auth-token";
+import { cn } from "@/lib/utils";
 import type { BuildEvent } from "@/lib/types";
 
 const STEPS = [
@@ -25,88 +36,166 @@ export function BuildProgress({ generationId }: { generationId: string }) {
   const [progressPct, setProgressPct] = useState(0);
   const [activeStep, setActiveStep] = useState(0);
   const [done, setDone] = useState(false);
-  const logRef = useRef<HTMLDivElement>(null);
+  const logAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const source = new EventSource(`${API_BASE_URL}/api/generations/${generationId}/stream`);
+    const controller = new AbortController();
 
-    source.onmessage = (event) => {
-      const data: BuildEvent = JSON.parse(event.data);
-      setProgressPct(data.progressPct);
-      setLogs((prev) => [...prev, { text: data.logLine, color: data.logLine.includes("✓") ? "#4ade80" : "#a1a1aa" }]);
-      const stepIndex = STEPS.findIndex((s) => s.label === data.stepLabel);
-      if (stepIndex >= 0) setActiveStep(stepIndex);
-      if (data.done) {
-        setDone(true);
-        source.close();
+    const readStream = async () => {
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/api/generations/${generationId}/stream`,
+          { headers: getAuthHeaders(), signal: controller.signal },
+        );
+
+        if (response.status === 401) {
+          clearAuth();
+          return;
+        }
+        if (!response.ok || !response.body) {
+          throw new Error(`Build stream failed with ${response.status}.`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done: streamDone, value } = await reader.read();
+          if (streamDone) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const events = buffer.split("\n\n");
+          buffer = events.pop() ?? "";
+
+          for (const event of events) {
+            const dataLine = event
+              .split("\n")
+              .find((line) => line.startsWith("data:"));
+            if (!dataLine) continue;
+
+            const data: BuildEvent = JSON.parse(dataLine.slice(5).trim());
+            setProgressPct(data.progressPct);
+            setLogs((previousLogs) => [
+              ...previousLogs,
+              {
+                text: data.logLine,
+                color: data.logLine.includes("✓") ? "#4ade80" : "#a1a1aa",
+              },
+            ]);
+            const stepIndex = STEPS.findIndex(
+              (step) => step.label === data.stepLabel,
+            );
+            if (stepIndex >= 0) setActiveStep(stepIndex);
+            if (data.done) {
+              setDone(true);
+              controller.abort();
+              return;
+            }
+          }
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
       }
     };
 
-    source.onerror = () => {
-      // The stream 500s once the generation's channel is torn down after
-      // completion -- harmless if we've already seen a `done` event.
-      source.close();
-    };
-
-    return () => source.close();
+    void readStream();
+    return () => controller.abort();
   }, [generationId]);
 
   useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+    const viewport = logAreaRef.current?.querySelector<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [logs]);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-[240px_1fr] gap-6">
-      <div className="flex flex-col">
+      <Timeline>
         {STEPS.map((step, index) => {
           const isDone = index < activeStep || (index === activeStep && done);
           const isActive = index === activeStep && !done;
           return (
-            <div key={step.label} className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <div
-                  className={`size-6 rounded-full flex items-center justify-center text-xs font-bold border ${
+            <TimelineItem
+              key={step.label}
+              className="grid-cols-[24px_minmax(0,1fr)] pb-7 last:pb-0"
+            >
+              <TimelineRail className="w-6">
+                <TimelineIndicator
+                  className={cn(
+                    "mt-0 flex size-6 items-center justify-center border-2 text-xs font-bold",
                     isDone
-                      ? "bg-[var(--brand)] text-white border-[var(--brand)]"
+                      ? "border-[var(--brand)] bg-[var(--brand)] text-white"
                       : isActive
-                        ? "bg-blue-50 text-blue-700 border-blue-200 animate-pulse"
-                        : "bg-card text-muted-foreground border-border"
-                  }`}
+                        ? "border-blue-200 bg-blue-50 text-blue-700"
+                        : "border-border bg-card text-muted-foreground",
+                  )}
                 >
-                  {isDone ? <CheckIcon className="size-3.5" /> : isActive ? <span className="size-1.5 rounded-full bg-current" /> : index + 1}
-                </div>
-                <div className="w-px flex-1 bg-border min-h-7" />
-              </div>
-              <div className="pb-7">
-                <div className={`text-[13px] font-semibold ${isDone || isActive ? "text-foreground" : "text-muted-foreground"}`}>
+                  {isDone ? (
+                    <CheckIcon className="size-3.5" />
+                  ) : isActive ? (
+                    <span className="size-2 rounded-full bg-blue-600" />
+                  ) : (
+                    index + 1
+                  )}
+                </TimelineIndicator>
+                {index < STEPS.length - 1 && (
+                  <TimelineConnector
+                    className={cn(
+                      "-bottom-7",
+                      isDone ? "bg-[var(--brand)]" : "bg-border",
+                    )}
+                  />
+                )}
+              </TimelineRail>
+              <TimelineContent>
+                <div
+                  className={cn(
+                    "text-[13px] font-semibold",
+                    isDone || isActive
+                      ? "text-foreground"
+                      : "text-muted-foreground",
+                  )}
+                >
                   {step.label}
                 </div>
-                <div className="text-xs text-muted-foreground mt-0.5">{step.sub}</div>
-              </div>
-            </div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {step.sub}
+                </div>
+              </TimelineContent>
+            </TimelineItem>
           );
         })}
-      </div>
+      </Timeline>
 
       <div>
         <div className="flex items-center gap-2.5 mb-3.5">
           <Progress value={progressPct} className="flex-1 h-1.5" />
-          <span className="text-xs text-muted-foreground tabular-nums">{progressPct}%</span>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {progressPct}%
+          </span>
         </div>
-        <div
-          ref={logRef}
-          className="bg-zinc-950 rounded-[10px] p-4 h-[360px] overflow-y-auto font-mono text-[12.5px] leading-relaxed"
-        >
-          {logs.length === 0 && <div className="text-zinc-500">Waiting for build to start…</div>}
-          {logs.map((line, i) => (
-            <div key={i} style={{ color: line.color }}>
-              {line.text}
+        <div ref={logAreaRef}>
+          <ScrollArea className="h-[360px] overflow-hidden rounded-[10px] bg-zinc-950">
+            <div className="p-4 font-mono text-[12.5px] leading-relaxed">
+              {logs.length === 0 && (
+                <div className="text-zinc-500">Waiting for build to start…</div>
+              )}
+              {logs.map((line, i) => (
+                <div key={i} style={{ color: line.color }}>
+                  {line.text}
+                </div>
+              ))}
             </div>
-          ))}
+          </ScrollArea>
         </div>
         {done && (
           <div className="flex justify-end mt-5">
-            <Button onClick={() => navigate("/specifications")}>Done — back to dashboard</Button>
+            <Button onClick={() => navigate("/specifications")}>
+              Done — back to dashboard
+            </Button>
           </div>
         )}
       </div>

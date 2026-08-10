@@ -4,7 +4,15 @@ import { AuditGeneratedList } from "@/components/audit-generated-list";
 import { PageLoading } from "@/components/page-loading";
 import { NotFoundView } from "@/components/not-found-view";
 import { Card } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useSpecifications } from "@/hooks/use-specifications";
 import { useGeneratedProjects } from "@/hooks/use-generated";
 import { useAuditRollups } from "@/hooks/use-audit";
@@ -19,29 +27,50 @@ export function AdminAuditListPage() {
   const generatedQuery = useGeneratedProjects();
 
   if (!isValidMode) return <NotFoundView />;
-  if (rollupsQuery.isPending || specsQuery.isPending || generatedQuery.isPending) return <PageLoading />;
+  if (
+    rollupsQuery.isPending ||
+    specsQuery.isPending ||
+    generatedQuery.isPending
+  )
+    return <PageLoading />;
 
   const rollups = rollupsQuery.data ?? [];
-  const title = mode === "specifications" ? "Project specifications" : "Generated projects";
+  const title =
+    mode === "specifications" ? "Project specifications" : "Generated projects";
 
   return (
     <main className="flex-1 flex justify-center px-7 py-10">
       <div className="w-full max-w-[1000px]">
-        <PageBreadcrumb items={[{ label: "Admin", href: "/admin" }, { label: "Audit", href: "/admin/audit" }, { label: title }]} />
+        <PageBreadcrumb
+          items={[
+            { label: "Admin", href: "/admin" },
+            { label: "Audit", href: "/admin/audit" },
+            { label: title },
+          ]}
+        />
 
         <div className="text-[15px] font-bold mb-3.5">{title}</div>
 
         {mode === "specifications" ? (
           <SpecsAuditTable specs={specsQuery.data ?? []} rollups={rollups} />
         ) : (
-          <AuditGeneratedList specs={generatedQuery.data ?? []} rollups={rollups} />
+          <AuditGeneratedList
+            specs={generatedQuery.data ?? []}
+            rollups={rollups}
+          />
         )}
       </div>
     </main>
   );
 }
 
-function SpecsAuditTable({ specs, rollups }: { specs: SpecificationSummary[]; rollups: AiCallLogRollup[] }) {
+function SpecsAuditTable({
+  specs,
+  rollups,
+}: {
+  specs: SpecificationSummary[];
+  rollups: AiCallLogRollup[];
+}) {
   const rollupById = new Map(rollups.map((r) => [r.specificationId, r]));
 
   return (
@@ -58,8 +87,10 @@ function SpecsAuditTable({ specs, rollups }: { specs: SpecificationSummary[]; ro
         <TableBody>
           {specs.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground py-10">
-                No specifications yet.
+              <TableCell colSpan={4} className="py-10">
+                <Empty className="min-h-0 border-0 p-0">
+                  <EmptyDescription>No specifications yet.</EmptyDescription>
+                </Empty>
               </TableCell>
             </TableRow>
           ) : (
@@ -68,14 +99,25 @@ function SpecsAuditTable({ specs, rollups }: { specs: SpecificationSummary[]; ro
               return (
                 <TableRow key={spec.id}>
                   <TableCell>
-                    <Link to={`/admin/audit/specifications/${spec.id}`} className="font-semibold hover:underline">
+                    <Link
+                      to={`/admin/audit/specifications/${spec.id}`}
+                      className="font-semibold hover:underline"
+                    >
                       {spec.name}
                     </Link>
-                    <div className="text-xs text-muted-foreground">{spec.summary}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {spec.summary}
+                    </div>
                   </TableCell>
-                  <TableCell className="text-sm">{rollup?.logCount ?? 0}</TableCell>
-                  <TableCell className="text-sm">{rollup?.totalRequests ?? 0}</TableCell>
-                  <TableCell className="text-sm font-mono">{(rollup?.totalTokens ?? 0).toLocaleString("en-US")}</TableCell>
+                  <TableCell className="text-sm">
+                    {rollup?.logCount ?? 0}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {rollup?.totalRequests ?? 0}
+                  </TableCell>
+                  <TableCell className="text-sm font-mono">
+                    {(rollup?.totalTokens ?? 0).toLocaleString("en-US")}
+                  </TableCell>
                 </TableRow>
               );
             })

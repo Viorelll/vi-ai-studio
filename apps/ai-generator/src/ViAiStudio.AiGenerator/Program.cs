@@ -12,6 +12,14 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy => policy
+        .WithOrigins(builder.Configuration["Cors:AllowedOrigin"] ?? "http://localhost:3000")
+        .AllowAnyHeader()
+        .AllowAnyMethod());
+});
+
 builder.Services.AddSingleton<IModelProvider, SimulatedModelProvider>();
 builder.Services.AddHttpClient<ApiCallbackClient>();
 
@@ -37,12 +45,15 @@ builder.Services.AddScoped<BuildOrchestrator>();
 
 var app = builder.Build();
 
+app.UseCors();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
 }
 
+app.MapGet("/", () => Results.Redirect("/scalar"));
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapGenerateEndpoints();
 app.MapBuildsEndpoints();

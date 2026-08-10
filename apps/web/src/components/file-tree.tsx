@@ -1,4 +1,5 @@
 import { FolderIcon, FileIcon } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface FileTreeRow {
   key: string;
@@ -39,24 +40,55 @@ function buildRows(paths: string[]): FileTreeRow[] {
   return rows;
 }
 
-export function FileTree({ paths, bordered = true }: { paths: string[]; bordered?: boolean }) {
+export function FileTree({
+  paths,
+  bordered = true,
+  variant = "specification",
+}: {
+  paths: string[];
+  bordered?: boolean;
+  variant?: "specification" | "generated";
+}) {
   const rows = buildRows(paths);
+  const isGenerated = variant === "generated";
   return (
-    <div className={`max-h-[340px] overflow-y-auto ${bordered ? "rounded-lg border bg-card" : ""}`}>
+    <ScrollArea
+      className={`max-h-[340px] overflow-hidden ${bordered ? "rounded-lg border bg-card" : ""}`}
+    >
       {rows.map((row) => (
         <div
           key={row.key}
-          className="flex items-center gap-2 px-3.5 py-[7px] border-b last:border-b-0 text-[12.5px] font-mono"
-          style={{ paddingLeft: `${14 + row.depth * 18}px` }}
+          className={`flex items-center gap-2 border-b last:border-b-0 ${
+            isGenerated
+              ? "px-5 py-[9px] text-[13px] font-sans text-[#3f3f46]"
+              : "px-3.5 py-[7px] text-[12.5px] font-mono"
+          }`}
+          style={{
+            paddingLeft: `${(isGenerated ? 20 : 14) + row.depth * 18}px`,
+          }}
         >
           {row.isFile ? (
-            <FileIcon className="size-[13px] shrink-0 text-muted-foreground" />
+            <FileIcon
+              className={`${isGenerated ? "size-[15px]" : "size-[13px]"} shrink-0 text-muted-foreground`}
+            />
           ) : (
-            <FolderIcon className="size-[13px] shrink-0 text-foreground" />
+            <FolderIcon
+              className={`${isGenerated ? "size-[15px]" : "size-[13px]"} shrink-0 text-foreground`}
+            />
           )}
-          <span className={row.isFile ? "text-muted-foreground" : "font-semibold"}>{row.name}</span>
+          <span
+            className={
+              row.isFile
+                ? isGenerated
+                  ? "text-[#3f3f46]"
+                  : "text-muted-foreground"
+                : "font-semibold"
+            }
+          >
+            {row.name}
+          </span>
         </div>
       ))}
-    </div>
+    </ScrollArea>
   );
 }

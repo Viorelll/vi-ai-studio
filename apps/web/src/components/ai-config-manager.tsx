@@ -2,12 +2,39 @@ import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { CircleAlertIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
+import { ButtonGroup } from "@/components/ui/button-group";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { PROVIDERS, TASK_DEFS } from "@/lib/ai-task-defs";
 import {
   useAiConfigs,
@@ -29,7 +56,13 @@ const configFormSchema = z.object({
   apiKey: z.string(),
 });
 
-const EMPTY_FORM: AiConfigFormInput = { label: "", provider: "openAi", model: "", baseUrl: "", apiKey: "" };
+const EMPTY_FORM: AiConfigFormInput = {
+  label: "",
+  provider: "openAi",
+  model: "",
+  baseUrl: "",
+  apiKey: "",
+};
 
 export function AiConfigManager() {
   const configsQuery = useAiConfigs();
@@ -46,6 +79,9 @@ export function AiConfigManager() {
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [configToDelete, setConfigToDelete] = useState<AiModelConfig | null>(
+    null,
+  );
 
   const { control, handleSubmit, reset } = useForm<AiConfigFormInput>({
     resolver: zodResolver(configFormSchema),
@@ -60,7 +96,13 @@ export function AiConfigManager() {
 
   function openEdit(config: AiModelConfig) {
     setEditingId(config.id);
-    reset({ label: config.label, provider: config.provider, model: config.model, baseUrl: config.baseUrl, apiKey: "" });
+    reset({
+      label: config.label,
+      provider: config.provider,
+      model: config.model,
+      baseUrl: config.baseUrl,
+      apiKey: "",
+    });
     setShowForm(true);
   }
 
@@ -86,37 +128,72 @@ export function AiConfigManager() {
     setRevealed((prev) => ({ ...prev, [config.id]: apiKey }));
   }
 
+  function confirmDelete() {
+    if (!configToDelete) return;
+    deleteConfig.mutate(configToDelete.id, {
+      onSuccess: () => setConfigToDelete(null),
+    });
+  }
+
   const saving = createConfig.isPending || updateConfig.isPending;
 
   return (
     <div>
       <div className="flex items-center justify-between mb-3.5">
         <div className="text-[15px] font-bold">AI model configurations</div>
-        <Button onClick={openAdd}>+ Add configuration</Button>
+        <Button onClick={openAdd} className="h-9 rounded-lg px-3.5 text-[13px]">
+          + Add configuration
+        </Button>
       </div>
 
       {showForm && (
-        <Card className="p-5 mb-4 bg-muted/30">
+        <Card className="mb-4 rounded-[12px] bg-[#fafafa] p-5">
           <form onSubmit={handleSubmit(onSubmit)}>
-            <div className="text-[13px] font-bold mb-3.5">{editingId ? "Edit configuration" : "New configuration"}</div>
+            <div className="text-[13px] font-bold mb-3.5">
+              {editingId ? "Edit configuration" : "New configuration"}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3.5">
-              <div>
-                <Label className="text-xs font-semibold mb-1.5">Label</Label>
+              <Field className="gap-1.5">
+                <FieldLabel
+                  htmlFor="ai-config-label"
+                  className="text-xs font-semibold"
+                >
+                  Label
+                </FieldLabel>
                 <Controller
                   control={control}
                   name="label"
-                  render={({ field }) => <Input placeholder="e.g. GPT-4.1" {...field} />}
+                  render={({ field }) => (
+                    <Input
+                      id="ai-config-label"
+                      placeholder="e.g. GPT-4.1"
+                      {...field}
+                    />
+                  )}
                 />
-              </div>
-              <div>
-                <Label className="text-xs font-semibold mb-1.5">Provider</Label>
+              </Field>
+              <Field className="gap-1.5">
+                <FieldLabel
+                  htmlFor="ai-config-provider"
+                  className="text-xs font-semibold"
+                >
+                  Provider
+                </FieldLabel>
                 <Controller
                   control={control}
                   name="provider"
                   render={({ field }) => (
-                    <Select value={field.value} onValueChange={(v) => v && field.onChange(v)}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue>{() => PROVIDERS.find((p) => p.value === field.value)?.label ?? field.value}</SelectValue>
+                    <Select
+                      value={field.value}
+                      onValueChange={(v) => v && field.onChange(v)}
+                    >
+                      <SelectTrigger id="ai-config-provider" className="w-full">
+                        <SelectValue>
+                          {() =>
+                            PROVIDERS.find((p) => p.value === field.value)
+                              ?.label ?? field.value
+                          }
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {PROVIDERS.map((p) => (
@@ -128,45 +205,87 @@ export function AiConfigManager() {
                     </Select>
                   )}
                 />
-              </div>
-              <div>
-                <Label className="text-xs font-semibold mb-1.5">Model name</Label>
+              </Field>
+              <Field className="gap-1.5">
+                <FieldLabel
+                  htmlFor="ai-config-model"
+                  className="text-xs font-semibold"
+                >
+                  Model name
+                </FieldLabel>
                 <Controller
                   control={control}
                   name="model"
-                  render={({ field }) => <Input placeholder="e.g. gpt-4.1" {...field} />}
+                  render={({ field }) => (
+                    <Input
+                      id="ai-config-model"
+                      placeholder="e.g. gpt-4.1"
+                      {...field}
+                    />
+                  )}
                 />
-              </div>
-              <div>
-                <Label className="text-xs font-semibold mb-1.5">Base URL</Label>
+              </Field>
+              <Field className="gap-1.5">
+                <FieldLabel
+                  htmlFor="ai-config-base-url"
+                  className="text-xs font-semibold"
+                >
+                  Base URL
+                </FieldLabel>
                 <Controller
                   control={control}
                   name="baseUrl"
-                  render={({ field }) => <Input placeholder="https://api.example.com/v1" {...field} />}
+                  render={({ field }) => (
+                    <Input
+                      id="ai-config-base-url"
+                      placeholder="https://api.example.com/v1"
+                      {...field}
+                    />
+                  )}
                 />
-              </div>
-              <div className="sm:col-span-2">
-                <Label className="text-xs font-semibold mb-1.5">API key</Label>
+              </Field>
+              <Field className="gap-1.5 sm:col-span-2">
+                <FieldLabel
+                  htmlFor="ai-config-api-key"
+                  className="text-xs font-semibold"
+                >
+                  API key
+                </FieldLabel>
                 <Controller
                   control={control}
                   name="apiKey"
-                  render={({ field }) => <Input placeholder="sk-..." type="password" {...field} />}
+                  render={({ field }) => (
+                    <Input
+                      id="ai-config-api-key"
+                      placeholder="sk-..."
+                      type="password"
+                      {...field}
+                    />
+                  )}
                 />
-              </div>
+              </Field>
             </div>
             <div className="flex justify-end gap-2.5">
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowForm(false)}
+              >
                 Cancel
               </Button>
               <Button type="submit" disabled={saving}>
-                {saving ? "Saving…" : editingId ? "Save changes" : "Add configuration"}
+                {saving
+                  ? "Saving…"
+                  : editingId
+                    ? "Save changes"
+                    : "Add configuration"}
               </Button>
             </div>
           </form>
         </Card>
       )}
 
-      <Card className="p-0 overflow-hidden mb-9">
+      <Card className="mb-9 rounded-[12px] p-0 overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
@@ -181,38 +300,67 @@ export function AiConfigManager() {
           <TableBody>
             {configs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
-                  No model configurations yet.
+                <TableCell colSpan={6} className="py-10">
+                  <Empty className="min-h-0 border-0 p-0">
+                    <EmptyDescription>
+                      No model configurations yet.
+                    </EmptyDescription>
+                  </Empty>
                 </TableCell>
               </TableRow>
             ) : (
               configs.map((config) => (
                 <TableRow key={config.id}>
-                  <TableCell className="font-semibold text-[13.5px]">{config.label}</TableCell>
-                  <TableCell className="text-sm">{PROVIDERS.find((p) => p.value === config.provider)?.label ?? config.provider}</TableCell>
-                  <TableCell className="text-sm font-mono">{config.model}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground truncate max-w-[180px]">{config.baseUrl}</TableCell>
+                  <TableCell className="font-semibold text-[13.5px]">
+                    {config.label}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {PROVIDERS.find((p) => p.value === config.provider)
+                      ?.label ?? config.provider}
+                  </TableCell>
+                  <TableCell className="text-sm font-mono">
+                    {config.model}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground truncate max-w-[180px]">
+                    {config.baseUrl}
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono">{revealed[config.id] ?? config.maskedApiKey}</span>
-                      <button
+                      <span className="text-xs font-mono">
+                        {revealed[config.id] ?? config.maskedApiKey}
+                      </span>
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="sm"
                         onClick={() => toggleReveal(config)}
-                        className="text-[11.5px] font-semibold text-blue-600 hover:underline"
+                        className="h-6 rounded-md px-1 text-[11.5px] font-semibold text-blue-600 hover:bg-transparent hover:text-blue-700 hover:underline"
                       >
                         {revealed[config.id] ? "Hide" : "Show"}
-                      </button>
+                      </Button>
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-1.5">
-                      <Button variant="outline" size="sm" onClick={() => openEdit(config)}>
+                    <ButtonGroup
+                      className="ml-auto"
+                      aria-label={`Actions for ${config.label}`}
+                    >
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEdit(config)}
+                      >
                         Edit
                       </Button>
-                      <Button variant="destructive" size="sm" onClick={() => deleteConfig.mutate(config.id)}>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => setConfigToDelete(config)}
+                      >
                         Delete
                       </Button>
-                    </div>
+                    </ButtonGroup>
                   </TableCell>
                 </TableRow>
               ))
@@ -221,40 +369,93 @@ export function AiConfigManager() {
         </Table>
       </Card>
 
+      <AlertDialog
+        open={Boolean(configToDelete)}
+        onOpenChange={(open) => {
+          if (!open && !deleteConfig.isPending) setConfigToDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <CircleAlertIcon />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Delete configuration?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {configToDelete
+                ? `This permanently removes ${configToDelete.label} and unassigns it from any routed tasks.`
+                : "This permanently removes the selected configuration."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteConfig.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleteConfig.isPending}
+              onClick={confirmDelete}
+            >
+              {deleteConfig.isPending ? "Deleting…" : "Delete configuration"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="text-[15px] font-bold mb-3.5">Task routing</div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {TASK_DEFS.map((task) => {
-          const currentRouting = routing.find((r) => r.task === task.key);
-          return (
-            <Card key={task.key} className="p-4.5">
-              <div className="text-sm font-bold mb-1">{task.label}</div>
-              <p className="text-[12.5px] text-muted-foreground mb-3.5">{task.desc}</p>
-              <Select
-                value={currentRouting?.aiModelConfigId ?? "__unassigned__"}
-                onValueChange={(v) =>
-                  updateRouting.mutate({ task: task.key, aiModelConfigId: v === "__unassigned__" ? null : (v ?? null) })
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue>
-                    {() => {
-                      const assigned = configs.find((c) => c.id === currentRouting?.aiModelConfigId);
-                      return assigned?.label ?? "Unassigned";
-                    }}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__unassigned__">Unassigned</SelectItem>
-                  {configs.map((config) => (
-                    <SelectItem key={config.id} value={config.id}>
-                      {config.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Card>
-          );
-        })}
+        {TASK_DEFS.filter((task) => task.key !== "specGeneration").map(
+          (task) => {
+            const currentRouting = routing.find((r) => r.task === task.key);
+            return (
+              <Card key={task.key} className="rounded-[12px] p-4.5">
+                <Field className="gap-1">
+                  <FieldLabel
+                    htmlFor={`task-routing-${task.key}`}
+                    className="text-sm font-bold"
+                  >
+                    {task.label}
+                  </FieldLabel>
+                  <FieldDescription className="mb-2.5 text-[12.5px]">
+                    {task.desc}
+                  </FieldDescription>
+                  <Select
+                    value={currentRouting?.aiModelConfigId ?? "__unassigned__"}
+                    onValueChange={(v) =>
+                      updateRouting.mutate({
+                        task: task.key,
+                        aiModelConfigId:
+                          v === "__unassigned__" ? null : (v ?? null),
+                      })
+                    }
+                  >
+                    <SelectTrigger
+                      id={`task-routing-${task.key}`}
+                      className="w-full"
+                    >
+                      <SelectValue>
+                        {() => {
+                          const assigned = configs.find(
+                            (c) => c.id === currentRouting?.aiModelConfigId,
+                          );
+                          return assigned?.label ?? "Unassigned";
+                        }}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__unassigned__">Unassigned</SelectItem>
+                      {configs.map((config) => (
+                        <SelectItem key={config.id} value={config.id}>
+                          {config.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </Card>
+            );
+          },
+        )}
       </div>
     </div>
   );
