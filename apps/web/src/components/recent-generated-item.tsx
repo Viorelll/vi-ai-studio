@@ -43,14 +43,16 @@ export function RecentGeneratedItem({
                   {spec.name}
                 </span>
               </div>
-              <div className="shrink-0">
-                <Badge
-                  variant="outline"
-                  className={getStatusBadgeClassName(spec.status)}
-                >
-                  {getStatusLabel(spec.status)}
-                </Badge>
-              </div>
+              {latest && (
+                <div className="shrink-0">
+                  <Badge
+                    variant="outline"
+                    className={getStatusBadgeClassName(latest.status)}
+                  >
+                    {getStatusLabel(latest.status)}
+                  </Badge>
+                </div>
+              )}
             </div>
             <div className="flex min-w-0 items-center gap-2 pl-4.5">
               <Badge

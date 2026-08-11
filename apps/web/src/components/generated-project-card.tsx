@@ -66,21 +66,23 @@ export function GeneratedProjectCard({
               </div>
               <div className="flex items-center gap-3.5 shrink-0">
                 {latest && (
-                  <div className="text-right">
-                    <div className="text-[12.5px] font-semibold">
-                      v{latest.version}
+                  <>
+                    <div className="text-right">
+                      <div className="text-[12.5px] font-semibold">
+                        v{latest.version}
+                      </div>
+                      <div className="mt-0.5 text-[11.5px] text-[#a1a1aa]">
+                        Latest: {formatDateTime(latest.created)}
+                      </div>
                     </div>
-                    <div className="mt-0.5 text-[11.5px] text-[#a1a1aa]">
-                      Latest: {formatDateTime(latest.created)}
-                    </div>
-                  </div>
+                    <Badge
+                      variant="outline"
+                      className={getStatusBadgeClassName(latest.status)}
+                    >
+                      {getStatusLabel(latest.status)}
+                    </Badge>
+                  </>
                 )}
-                <Badge
-                  variant="outline"
-                  className={getStatusBadgeClassName(spec.status)}
-                >
-                  {getStatusLabel(spec.status)}
-                </Badge>
               </div>
             </Button>
           }

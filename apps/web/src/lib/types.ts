@@ -38,6 +38,7 @@ export interface SpecificationSummary {
   stack: TechStack;
   generationCount: number;
   latestGenerationVersion: number | null;
+  latestGenerationStatus: GenerationStatus | null;
 }
 
 export interface SpecificationPhase {

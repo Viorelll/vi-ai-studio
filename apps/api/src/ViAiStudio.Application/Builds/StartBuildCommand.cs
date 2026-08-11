@@ -8,9 +8,12 @@ public sealed record StartBuildCommand(Guid SpecificationId, Guid? AiModelConfig
 
 /// <summary>
 /// Starts an AI Build run: allocates the next <see cref="Generation"/>
-/// version, flips the specification to Building, and dispatches the job to
-/// AI Generator. AI Generator reports progress and completion back
-/// asynchronously via the internal build-events webhook.
+/// version and dispatches the job to AI Generator. AI Generator reports
+/// progress and completion back asynchronously via the internal
+/// build-events webhook, which only ever updates that <see cref="Generation"/>
+/// -- the owning <see cref="Specification"/>'s own status is untouched by
+/// any of this, since it reflects the specification's own lifecycle, not
+/// any one build's outcome.
 /// </summary>
 public sealed class StartBuildHandler(
     ISpecificationRepository specificationRepository,
@@ -24,7 +27,7 @@ public sealed class StartBuildHandler(
         var specification = await specificationRepository.GetAsync(command.SpecificationId, cancellationToken)
             ?? throw new InvalidOperationException($"Specification '{command.SpecificationId}' does not exist.");
 
-        if (specification.Status == SpecificationStatus.Building)
+        if (specification.Generations.Any(g => g.Status == GenerationStatus.Running))
         {
             throw new InvalidOperationException("A build is already running for this specification.");
         }
@@ -55,7 +58,6 @@ public sealed class StartBuildHandler(
         };
         await generationRepository.AddAsync(generation, cancellationToken);
 
-        specification.Status = SpecificationStatus.Building;
         specification.Progress = 2;
 
         await specificationRepository.SaveChangesAsync(cancellationToken);
@@ -73,9 +75,7 @@ public sealed class StartBuildHandler(
         {
             generation.Status = GenerationStatus.Failed;
             generation.Note = $"Failed to dispatch to AI Generator: {ex.Message}";
-            specification.Status = SpecificationStatus.Failed;
             await generationRepository.SaveChangesAsync(cancellationToken);
-            await specificationRepository.SaveChangesAsync(cancellationToken);
         }
 
         return generation;

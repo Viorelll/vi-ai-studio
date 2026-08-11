@@ -9,8 +9,10 @@ public sealed record FinalizeSpecificationCommand(Guid SpecificationId);
 
 /// <summary>
 /// Renders the full specification markdown from all 15 phases once the
-/// wizard is complete. The specification stays Draft -- AI Build (see
-/// StartBuildCommand) is a separate, explicit step.
+/// wizard is complete and moves the specification from Draft to Ready.
+/// This is the only transition of the specification's own status -- AI
+/// Build (see StartBuildCommand) is a separate, explicit step whose
+/// individual run outcomes never feed back into it.
 /// </summary>
 public sealed class FinalizeSpecificationHandler(ISpecificationRepository specificationRepository)
 {
@@ -20,6 +22,7 @@ public sealed class FinalizeSpecificationHandler(ISpecificationRepository specif
             ?? throw new InvalidOperationException($"Specification '{command.SpecificationId}' does not exist.");
 
         specification.SpecMarkdown = RenderMarkdown(specification);
+        specification.Status = SpecificationStatus.Ready;
 
         var firstPhaseText = specification.Phases.SingleOrDefault(p => p.PhaseIndex == 0)?.GeneratedText;
         if (!string.IsNullOrWhiteSpace(firstPhaseText))

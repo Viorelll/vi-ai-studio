@@ -57,7 +57,7 @@ export function SpecificationDetailPage() {
     spec.stack.infra,
   ];
   const canEdit = spec.status === "draft";
-  const isFinalized = Boolean(spec.specMarkdown);
+  const latestGeneration = spec.generations[0]; // API orders these newest-first
 
   return (
     <main className="flex-1 flex justify-center px-7 py-10">
@@ -78,6 +78,14 @@ export function SpecificationDetailPage() {
             >
               {getStatusLabel(spec.status)}
             </Badge>
+            {latestGeneration && (
+              <Badge
+                variant="outline"
+                className={getStatusBadgeClassName(latestGeneration.status)}
+              >
+                Build: {getStatusLabel(latestGeneration.status)}
+              </Badge>
+            )}
             <Button
               type="button"
               variant="outline"
@@ -149,12 +157,12 @@ export function SpecificationDetailPage() {
         </Card>
 
         <div className="flex shrink-0 justify-end mt-6">
-          {canEdit && !isFinalized && (
+          {canEdit && (
             <Link to={`/studio/${spec.id}`} className={cn(buttonVariants())}>
               Continue in Studio
             </Link>
           )}
-          {canEdit && isFinalized && (
+          {!canEdit && !latestGeneration && (
             <Link
               to={`/specifications/${spec.id}/launch`}
               className={cn(buttonVariants())}
@@ -162,7 +170,7 @@ export function SpecificationDetailPage() {
               Start AI Build
             </Link>
           )}
-          {spec.status === "ready" && (
+          {!canEdit && latestGeneration?.status === "ready" && (
             <Link
               to={`/specifications/${spec.id}/launch`}
               className={cn(buttonVariants())}
@@ -170,7 +178,7 @@ export function SpecificationDetailPage() {
               Rebuild
             </Link>
           )}
-          {spec.status === "failed" && (
+          {!canEdit && latestGeneration?.status === "failed" && (
             <Link
               to={`/specifications/${spec.id}/launch`}
               className={cn(buttonVariants())}
@@ -178,9 +186,9 @@ export function SpecificationDetailPage() {
               Retry AI Build
             </Link>
           )}
-          {spec.status === "building" && (
+          {!canEdit && latestGeneration?.status === "running" && (
             <Link
-              to={`/build/${spec.id}?generation=${spec.generations.find((g) => g.status === "running")?.id ?? ""}`}
+              to={`/build/${spec.id}?generation=${latestGeneration.id}`}
               className={cn(buttonVariants())}
             >
               View build progress

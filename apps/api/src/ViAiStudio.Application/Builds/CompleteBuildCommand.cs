@@ -35,7 +35,6 @@ public sealed class CompleteBuildHandler(
         generation.FileTree = command.FileTree;
         generation.ArchiveStorageKey = command.ArchiveStorageKey;
 
-        specification.Status = command.Success ? SpecificationStatus.Ready : SpecificationStatus.Failed;
         specification.Progress = command.Success ? 100 : specification.Progress;
 
         foreach (var call in command.AiCalls)

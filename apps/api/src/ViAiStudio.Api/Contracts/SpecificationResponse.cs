@@ -20,19 +20,28 @@ public sealed record SpecificationSummaryResponse(
     int Progress,
     TechStackResponse Stack,
     int GenerationCount,
-    int? LatestGenerationVersion)
+    int? LatestGenerationVersion,
+    GenerationStatus? LatestGenerationStatus)
 {
-    public static SpecificationSummaryResponse FromEntity(Specification specification) => new(
-        specification.Id,
-        specification.Name,
-        specification.Summary,
-        specification.Status,
-        specification.Owner,
-        specification.CreatedAt,
-        specification.Progress,
-        TechStackResponse.FromValue(specification.Stack),
-        specification.Generations.Count,
-        specification.Generations.Count == 0 ? null : specification.Generations.Max(g => g.Version));
+    public static SpecificationSummaryResponse FromEntity(Specification specification)
+    {
+        var latestGeneration = specification.Generations.Count == 0
+            ? null
+            : specification.Generations.OrderByDescending(g => g.Version).First();
+
+        return new(
+            specification.Id,
+            specification.Name,
+            specification.Summary,
+            specification.Status,
+            specification.Owner,
+            specification.CreatedAt,
+            specification.Progress,
+            TechStackResponse.FromValue(specification.Stack),
+            specification.Generations.Count,
+            latestGeneration?.Version,
+            latestGeneration?.Status);
+    }
 }
 
 /// <summary>Full detail shape for the specification detail page.</summary>

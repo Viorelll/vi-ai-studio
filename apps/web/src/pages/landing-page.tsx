@@ -34,12 +34,14 @@ export function LandingPage() {
   }
 
   const draftCount = specs.filter((s) => s.status === "draft").length;
-  const buildingCount = specs.filter((s) => s.status === "building").length;
+  const buildingCount = specs.filter(
+    (s) => s.latestGenerationStatus === "running",
+  ).length;
   const readyCount = generatedProjects.filter(
-    (s) => s.status === "ready",
+    (s) => s.latestGenerationStatus === "ready",
   ).length;
   const failedCount = generatedProjects.filter(
-    (s) => s.status === "failed",
+    (s) => s.latestGenerationStatus === "failed",
   ).length;
 
   return (

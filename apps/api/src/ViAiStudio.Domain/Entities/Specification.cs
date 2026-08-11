@@ -12,9 +12,12 @@ public enum SpecificationStatus
 
 /// <summary>
 /// A project specification authored in AI Specification Studio. Starts as a
-/// Draft while its 15 wizard phases are filled in, moves to Building while
-/// AI Build is generating a project from it, and settles on Ready or Failed
-/// once a <see cref="Generation"/> completes.
+/// Draft while its 15 wizard phases are filled in and becomes Ready once
+/// finalized. This status is the specification's own -- it never changes
+/// because of what any one <see cref="Generation"/> (AI Build run) does;
+/// a specification can be rebuilt many times, successfully or not, without
+/// its own Ready status moving. Build-specific progress lives on each
+/// <see cref="Generation"/> instead.
 /// </summary>
 public sealed class Specification
 {
