@@ -10,7 +10,7 @@ public sealed record TechStack(string Backend, string Ui, string Database, strin
 {
     public static TechStack Default { get; } = new(
         Backend: ".NET Web API",
-        Ui: "Next.js",
+        Ui: "React + Vite",
         Database: "PostgreSQL",
         Infra: "Docker",
         UiStyle: "Tailwind");

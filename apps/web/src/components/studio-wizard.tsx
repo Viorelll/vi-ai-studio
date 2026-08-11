@@ -45,7 +45,7 @@ const TECHNICAL_DESIGN_PHASE_INDEX = 7;
 const STACK_FIELDS: {
   key: keyof TechStack;
   label: string;
-  options: { value: string; disabled?: boolean }[];
+  options: { value: string; label?: string; disabled?: boolean }[];
 }[] = [
   {
     key: "backend",
@@ -60,7 +60,8 @@ const STACK_FIELDS: {
     key: "ui",
     label: "UI framework",
     options: [
-      { value: "Next.js" },
+      { value: "React + Vite" },
+      { value: "Next.js", label: "Next.js (coming soon)", disabled: true },
       { value: "Angular (coming soon)", disabled: true },
       { value: "Blazor (coming soon)", disabled: true },
     ],
@@ -439,7 +440,7 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
                         value={opt.value}
                         disabled={opt.disabled}
                       >
-                        {opt.value}
+                        {opt.label ?? opt.value}
                       </SelectItem>
                     ))}
                   </SelectContent>

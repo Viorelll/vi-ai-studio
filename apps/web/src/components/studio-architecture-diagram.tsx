@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 
 const LAYERS = [
-  { label: "Frontend (Next.js)", tone: "bg-zinc-900" },
+  { label: "Frontend (React + Vite)", tone: "bg-zinc-900" },
   { label: "API (.NET)", tone: "bg-zinc-900" },
   { label: "Application Layer", tone: "bg-zinc-700" },
   { label: "Domain Layer", tone: "bg-zinc-700" },
