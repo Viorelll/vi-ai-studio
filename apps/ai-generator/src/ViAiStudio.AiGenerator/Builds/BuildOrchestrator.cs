@@ -100,11 +100,19 @@ public sealed class BuildOrchestrator(
             $"Generated {workspace.FileTree.Count} files.", GenerationCompletePct, cancellationToken);
     }
 
+    /// <summary>
+    /// One gate the project has to pass. Wrapping both the static, no-Docker
+    /// check and every Docker-backed verification step in the same shape lets
+    /// them share one repair loop, one infra-retry policy and one progress
+    /// report, instead of static validation needing bespoke plumbing.
+    /// </summary>
+    private sealed record PipelineStep(string Name, string StartMessage, Func<CancellationToken, Task<SandboxRunResult>> Run);
+
     private async Task VerifyProjectAsync(
         string jobId, StartBuildRequest request, BuildWorkspace workspace,
         List<BuildAiCallReport> aiCalls, CancellationToken cancellationToken)
     {
-        var steps = verifier.Steps;
+        var steps = BuildPipeline(workspace);
         var span = (VerificationCompletePct - GenerationCompletePct) / (double)steps.Count;
 
         for (var index = 0; index < steps.Count; index++)
@@ -127,16 +135,39 @@ public sealed class BuildOrchestrator(
     }
 
     /// <summary>
-    /// Runs one verification step, feeding its failure output back to the model
-    /// and re-running until it passes or the attempt budget is spent. Bails out
-    /// early if a repair round produces no file changes -- re-running an
-    /// identical workspace would just burn tokens on the same failure.
+    /// The static check runs first and free -- catching a missing project
+    /// reference or an unversioned package here costs milliseconds, where the
+    /// same mistake surfacing from <c>Backend build</c> costs a full Docker run.
+    /// </summary>
+    private List<PipelineStep> BuildPipeline(BuildWorkspace workspace)
+    {
+        var pipeline = new List<PipelineStep>
+        {
+            new("Static validation", "Checking project structure…",
+                _ => Task.FromResult(ProjectStaticValidator.Validate(workspace.Files))),
+        };
+        pipeline.AddRange(verifier.Steps.Select(step =>
+            new PipelineStep(step.Name, step.StartMessage, ct => verifier.RunAsync(step, workspace.HostPath, ct))));
+        return pipeline;
+    }
+
+    /// <summary>
+    /// Runs one step, feeding its failure output back to the model and
+    /// re-running until it passes or the attempt budget is spent. Infra
+    /// failures (Docker timeouts, image pulls, a daemon blip) are retried
+    /// directly and never reach the model or consume a repair attempt --
+    /// asking the model to "fix" a container timeout is nonsensical. Also
+    /// bails out early if a repair round produces no file changes, or if two
+    /// consecutive attempts land on the identical failure signature: a loop
+    /// that keeps producing different files but the same error is not making
+    /// progress and shouldn't be allowed to burn the rest of its budget.
     /// </summary>
     private async Task<SandboxRunResult> RunStepWithRepairAsync(
-        string jobId, StartBuildRequest request, BuildWorkspace workspace, VerificationStep step,
+        string jobId, StartBuildRequest request, BuildWorkspace workspace, PipelineStep step,
         List<BuildAiCallReport> aiCalls, int stepStartPct, CancellationToken cancellationToken)
     {
-        var result = await verifier.RunAsync(step, workspace.HostPath, cancellationToken);
+        var result = await RunWithInfraRetriesAsync(step, cancellationToken);
+        var previousSignature = result.Succeeded ? null : ErrorSignature.Compute(result.Output);
 
         for (var attempt = 1; attempt <= options.MaxRepairAttempts && !result.Succeeded; attempt++)
         {
@@ -157,11 +188,52 @@ public sealed class BuildOrchestrator(
             await ReportAsync(jobId, request, step.Name,
                 $"Applied {repair.Files.Count} file change(s); re-running {step.Name}…", stepStartPct, cancellationToken);
 
-            result = await verifier.RunAsync(step, workspace.HostPath, cancellationToken);
+            result = await RunWithInfraRetriesAsync(step, cancellationToken);
+            if (result.Succeeded) break;
+
+            var signature = ErrorSignature.Compute(result.Output);
+            if (signature == previousSignature)
+            {
+                logger.LogWarning(
+                    "Repair attempt {Attempt} for {Step} produced the same failure as before; stopping early instead of repeating it",
+                    attempt, step.Name);
+                break;
+            }
+            previousSignature = signature;
         }
 
         return result;
     }
+
+    /// <summary>
+    /// Retries a step directly -- no model call, no repair attempt spent --
+    /// while it keeps failing for an infrastructure reason. Once it either
+    /// succeeds, fails for a genuine code reason, or exhausts its retry
+    /// budget, the result is handed back to the repair loop as-is.
+    /// </summary>
+    private async Task<SandboxRunResult> RunWithInfraRetriesAsync(PipelineStep step, CancellationToken cancellationToken)
+    {
+        var result = await step.Run(cancellationToken);
+
+        for (var infraAttempt = 1; !result.Succeeded && IsInfraFailure(result.FailureKind) && infraAttempt <= options.MaxInfraRetries; infraAttempt++)
+        {
+            logger.LogWarning(
+                "{Step} failed for an infrastructure reason ({Kind}); retrying directly ({Attempt}/{Max}) without invoking the model",
+                step.Name, result.FailureKind, infraAttempt, options.MaxInfraRetries);
+
+            await Task.Delay(options.InfraRetryDelay, cancellationToken);
+            result = await step.Run(cancellationToken);
+        }
+
+        return result;
+    }
+
+    private static bool IsInfraFailure(SandboxFailureKind kind) => kind is
+        SandboxFailureKind.Timeout or
+        SandboxFailureKind.ImagePullFailed or
+        SandboxFailureKind.DaemonUnreachable or
+        SandboxFailureKind.ContainerStartFailed or
+        SandboxFailureKind.ContainerOom;
 
     private async Task<string?> TryArchiveAsync(Guid generationId, BuildWorkspace workspace)
     {

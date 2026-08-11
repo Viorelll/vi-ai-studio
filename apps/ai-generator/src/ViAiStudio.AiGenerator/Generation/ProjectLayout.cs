@@ -14,6 +14,7 @@ public static class ProjectLayout
     public const string FrontendDirectory = "frontend";
     public const int BackendPort = 8080;
     public const string HealthPath = "/health";
+    public const string OpenApiPath = "/openapi/v1.json";
     public const string ConnectionStringEnvVar = "ConnectionStrings__Postgres";
 
     /// <summary>Prompt fragment describing the non-negotiable structure of the output.</summary>
@@ -36,7 +37,17 @@ public static class ProjectLayout
 
         Hard requirements:
         - The backend must start successfully even on a completely empty database
-          (apply migrations or create the schema on startup).
+          (apply migrations or create the schema on startup). The pipeline connects to the
+          database directly after boot and fails the build if no tables exist in the public
+          schema, so "the app starts" is not sufficient on its own -- it must actually create
+          real tables.
+        - The backend must call `AddOpenApi()`/`MapOpenApi()` (Microsoft.AspNetCore.OpenApi,
+          already referenced by the SDK) unconditionally -- not only when
+          `Environment.IsDevelopment()` -- so the document is served at `{OpenApiPath}`. It
+          must list at least one real endpoint besides `{HealthPath}`, and at least one of
+          those endpoints must be a `GET` with no path parameters and no required
+          authentication, because the pipeline calls it as an automated smoke test and treats
+          any HTTP 5xx (or no response) as a failed build.
         - Do not use any paid, licensed or credential-requiring third-party service.
         - Pin package versions that actually exist and are mutually compatible.
         - Every file must be complete and compilable. Never emit placeholders,

@@ -99,6 +99,18 @@ public sealed class ProjectCodeGenerator(IModelProvider modelProvider, ILogger<P
     private static string BuildRepairPrompt(
         StartBuildRequest request, IReadOnlyList<GeneratedFile> currentFiles, string stepName, string errorLog)
     {
+        // The diagnostics name the files actually at fault; sending only those
+        // (plus the manifests every step depends on) keeps the prompt's size
+        // bounded by the failure instead of by the size of the whole project,
+        // and stops the model from being tempted to rewrite files that were
+        // never implicated. Falls back to the full file set when the log
+        // doesn't name anything recognizable (e.g. a Docker/integration
+        // failure), since narrowing on nothing would just hide the project.
+        var relevantFiles = DiagnosticFileExtractor.ExtractRelevantFiles(errorLog, currentFiles);
+        var filesToSend = relevantFiles.Count > 0
+            ? MergeWithProjectManifests(relevantFiles, currentFiles)
+            : currentFiles;
+
         var sb = new StringBuilder();
         sb.AppendLine($"The generated project for \"{request.SpecificationName}\" failed the \"{stepName}\" step.");
         sb.AppendLine("Fix the underlying cause and return ONLY the files that need to change or be added.");
@@ -107,14 +119,48 @@ public sealed class ProjectCodeGenerator(IModelProvider modelProvider, ILogger<P
         sb.AppendLine("=== FAILURE OUTPUT ===");
         sb.AppendLine(Truncate(errorLog, 12000));
         sb.AppendLine();
-        sb.AppendLine("=== CURRENT REPOSITORY ===");
-        foreach (var file in currentFiles)
+        if (filesToSend.Count < currentFiles.Count)
+        {
+            sb.AppendLine($"=== FILES NAMED IN THE FAILURE OUTPUT ({filesToSend.Count} of {currentFiles.Count} in the project) ===");
+            sb.AppendLine("Only the files below are included, because the failure output identifies them specifically.");
+            sb.AppendLine("If fixing this genuinely requires touching a file not shown here, you may still return it by path.");
+        }
+        else
+        {
+            sb.AppendLine("=== CURRENT REPOSITORY ===");
+        }
+        foreach (var file in filesToSend)
         {
             sb.AppendLine($"--- {file.Path} ---");
             sb.AppendLine(Truncate(file.Content, 6000));
             sb.AppendLine();
         }
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Always keeps the project manifests (.csproj, package.json, tsconfig,
+    /// docker-compose.yml) in the narrowed set even when the diagnostics don't
+    /// name them directly -- a missing/incompatible reference is often only
+    /// visible from the manifest, not the file that failed to compile.
+    /// </summary>
+    private static IReadOnlyList<GeneratedFile> MergeWithProjectManifests(
+        IReadOnlyList<GeneratedFile> relevantFiles, IReadOnlyList<GeneratedFile> currentFiles)
+    {
+        var manifestSuffixes = new[] { ".csproj", "package.json", "tsconfig.json", "docker-compose.yml" };
+        var merged = new List<GeneratedFile>(relevantFiles);
+        var included = relevantFiles.Select(f => f.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var file in currentFiles)
+        {
+            if (included.Contains(file.Path)) continue;
+            if (manifestSuffixes.Any(suffix => file.Path.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            {
+                merged.Add(file);
+                included.Add(file.Path);
+            }
+        }
+        return merged;
     }
 
     /// <summary>

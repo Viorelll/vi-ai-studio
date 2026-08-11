@@ -35,6 +35,15 @@ public sealed class ProjectVerifier(ISandboxExecutor sandbox, IOptions<SandboxOp
         throw new ArgumentOutOfRangeException(nameof(step), step.Name, "Unknown verification step.");
     }
 
+    /// <summary>
+    /// Where the NuGet global-packages folder and npm's cache live inside every
+    /// sandbox container. Bound to named Docker volumes (see <see cref="SandboxOptions"/>)
+    /// so restore doesn't hit the network from a cold container on every build
+    /// and every repair round.
+    /// </summary>
+    private const string NugetCacheMountPath = "/root/.nuget/packages";
+    private const string NpmCacheMountPath = "/root/.npm";
+
     private Task<SandboxRunResult> RunBackendBuildAsync(string workspaceHostPath, CancellationToken cancellationToken) =>
         sandbox.RunAsync(new SandboxRun(
             options.BackendImage,
@@ -48,7 +57,9 @@ public sealed class ProjectVerifier(ISandboxExecutor sandbox, IOptions<SandboxOp
             {
                 ["DOTNET_NOLOGO"] = "1",
                 ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1",
-            }),
+                ["NUGET_PACKAGES"] = NugetCacheMountPath,
+            },
+            AdditionalBinds: [$"{options.NugetCacheVolume}:{NugetCacheMountPath}"]),
             cancellationToken);
 
     private Task<SandboxRunResult> RunFrontendBuildAsync(string workspaceHostPath, CancellationToken cancellationToken) =>
@@ -61,13 +72,20 @@ public sealed class ProjectVerifier(ISandboxExecutor sandbox, IOptions<SandboxOp
             {
                 ["CI"] = "1",
                 ["NEXT_TELEMETRY_DISABLED"] = "1",
-            }),
+            },
+            // node:22-alpine's default user is root, whose home (and npm's
+            // default cache dir) is /root -- mounting the cache volume there
+            // needs no extra npm config.
+            AdditionalBinds: [$"{options.NpmCacheVolume}:{NpmCacheMountPath}"]),
             cancellationToken);
 
     /// <summary>
     /// The real stop condition: a Postgres container comes up on a private
-    /// network, the generated backend is started against it, and its health
-    /// endpoint has to answer 200 within the probe window.
+    /// network, the generated backend is started against it, its health
+    /// endpoint has to answer within the probe window, its OpenAPI document
+    /// has to list a real endpoint, a smoke call against that endpoint must
+    /// not 500, and the database must actually have tables in it -- "booted"
+    /// is not the same claim as "the migrations ran and something works".
     /// </summary>
     private async Task<SandboxRunResult> RunIntegrationAsync(string workspaceHostPath, CancellationToken cancellationToken)
     {
@@ -84,7 +102,7 @@ public sealed class ProjectVerifier(ISandboxExecutor sandbox, IOptions<SandboxOp
             },
             cancellationToken);
 
-        return await sandbox.RunAsync(new SandboxRun(
+        var appResult = await sandbox.RunAsync(new SandboxRun(
             options.BackendImage,
             HealthProbeScript,
             workspaceHostPath,
@@ -93,21 +111,48 @@ public sealed class ProjectVerifier(ISandboxExecutor sandbox, IOptions<SandboxOp
             {
                 ["DOTNET_NOLOGO"] = "1",
                 ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1",
+                ["NUGET_PACKAGES"] = NugetCacheMountPath,
                 [ProjectLayout.ConnectionStringEnvVar] =
                     $"Host={DatabaseAlias};Port=5432;Database={DatabaseName};Username={DatabaseUser};Password={DatabasePassword}",
                 ["ASPNETCORE_URLS"] = $"http://0.0.0.0:{ProjectLayout.BackendPort}",
                 ["ASPNETCORE_ENVIRONMENT"] = "Development",
             },
+            network.Name,
+            AdditionalBinds: [$"{options.NugetCacheVolume}:{NugetCacheMountPath}"]),
+            cancellationToken);
+
+        if (!appResult.Succeeded) return appResult;
+
+        // The app can only pass its own health probe by starting -- it says
+        // nothing about whether it created a schema. Ask Postgres directly,
+        // while the network (and its data) are still up, rather than trusting
+        // the app's word for it.
+        var schemaResult = await sandbox.RunAsync(new SandboxRun(
+            options.DatabaseImage,
+            SchemaCheckScript,
+            workspaceHostPath,
+            WorkingSubdirectory: null,
+            new Dictionary<string, string>
+            {
+                ["PGPASSWORD"] = DatabasePassword,
+            },
             network.Name),
             cancellationToken);
+
+        var combinedOutput = $"{appResult.Output}\n\n----- migrations check -----\n{schemaResult.Output}";
+        return schemaResult.Succeeded
+            ? appResult with { Output = combinedOutput }
+            : schemaResult with { Output = combinedOutput };
     }
 
     /// <summary>
-    /// Starts the app in the background and polls its health endpoint. The
-    /// application log is always echoed -- on failure it is the only thing that
-    /// explains *why* the boot failed, and it's what the repair prompt gets.
+    /// Starts the app in the background and polls its health endpoint, then --
+    /// only once healthy -- checks that its OpenAPI document lists a real
+    /// endpoint and smoke-tests that endpoint. The application log is always
+    /// echoed; on failure it is the only thing that explains *why* the boot
+    /// failed, and it's what the repair prompt gets.
     /// </summary>
-    private static readonly string HealthProbeScript = $"""
+    private static readonly string HealthProbeScript = $$"""
         set -e
         dotnet restore
         dotnet build -c Release
@@ -117,16 +162,59 @@ public sealed class ProjectVerifier(ISandboxExecutor sandbox, IOptions<SandboxOp
         healthy=0
         for attempt in $(seq 1 45); do
           sleep 2
-          if curl -fsS http://127.0.0.1:{ProjectLayout.BackendPort}{ProjectLayout.HealthPath} > /dev/null 2>&1; then healthy=1; break; fi
-          if wget -q -O - http://127.0.0.1:{ProjectLayout.BackendPort}{ProjectLayout.HealthPath} > /dev/null 2>&1; then healthy=1; break; fi
+          if curl -fsS http://127.0.0.1:{{ProjectLayout.BackendPort}}{{ProjectLayout.HealthPath}} > /dev/null 2>&1; then healthy=1; break; fi
+          if wget -q -O - http://127.0.0.1:{{ProjectLayout.BackendPort}}{{ProjectLayout.HealthPath}} > /dev/null 2>&1; then healthy=1; break; fi
         done
         echo '----- application log -----'
         cat /tmp/app.log || true
-        if [ "$healthy" = "1" ]; then
-          echo 'HEALTH_CHECK_PASSED'
+        if [ "$healthy" != "1" ]; then
+          echo 'HEALTH_CHECK_FAILED: {{ProjectLayout.HealthPath}} did not return 200 within 90 seconds.'
+          exit 1
+        fi
+        echo 'HEALTH_CHECK_PASSED'
+
+        echo '----- checking the OpenAPI document -----'
+        if ! (curl -fsS http://127.0.0.1:{{ProjectLayout.BackendPort}}{{ProjectLayout.OpenApiPath}} -o /tmp/openapi.json 2>&1 \
+              || wget -q -O /tmp/openapi.json http://127.0.0.1:{{ProjectLayout.BackendPort}}{{ProjectLayout.OpenApiPath}} 2>&1); then
+          echo 'OPENAPI_CHECK_FAILED: could not fetch {{ProjectLayout.OpenApiPath}}.'
+          exit 1
+        fi
+        other_paths=$(grep -oE '"(/[^"]*)"[[:space:]]*:[[:space:]]*\{' /tmp/openapi.json \
+          | sed -E 's/^"(.*)"[[:space:]]*:.*$/\1/' \
+          | grep -v '^{{ProjectLayout.HealthPath}}$' | grep -v '{' || true)
+        if [ -z "$other_paths" ]; then
+          echo 'OPENAPI_CHECK_FAILED: no endpoints beyond {{ProjectLayout.HealthPath}} were found in the OpenAPI document.'
+          exit 1
+        fi
+        echo 'OPENAPI_CHECK_PASSED'
+
+        smoke_path=$(echo "$other_paths" | head -n1)
+        echo "----- smoke testing $smoke_path -----"
+        code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:{{ProjectLayout.BackendPort}}$smoke_path" || echo 000)
+        echo "Smoke test status: $code"
+        if [ "$code" -ge 500 ] || [ "$code" = "000" ]; then
+          echo "SMOKE_CHECK_FAILED: GET $smoke_path returned $code"
+          exit 1
+        fi
+        echo 'SMOKE_CHECK_PASSED'
+        """;
+
+    /// <summary>
+    /// Counts tables in the public schema from the database's own side, so
+    /// "the app booted" and "the app actually created a schema" are checked
+    /// independently -- an app with a broken migration can still pass its own
+    /// health probe if the endpoint doesn't touch the database.
+    /// </summary>
+    private static readonly string SchemaCheckScript = $"""
+        set -e
+        count=$(psql -h {DatabaseAlias} -U {DatabaseUser} -d {DatabaseName} -tAc \
+          "select count(*) from information_schema.tables where table_schema='public';")
+        echo "Public tables found: $count"
+        if [ "$count" -gt 0 ]; then
+          echo 'MIGRATIONS_CHECK_PASSED'
           exit 0
         fi
-        echo 'HEALTH_CHECK_FAILED: {ProjectLayout.HealthPath} did not return 200 within 90 seconds.'
+        echo 'MIGRATIONS_CHECK_FAILED: no tables exist in the public schema -- migrations or schema creation did not run.'
         exit 1
         """;
 }

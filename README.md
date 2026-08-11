@@ -8,7 +8,7 @@ Vi - AI Studio is a SaaS-style tool with three surfaces:
 2. **AI Build** — hands that specification to a real model, which generates an entire repository, then **compiles and boots it inside Docker** and feeds every failure back to the model until it actually runs.
 3. **Admin** — model/provider configuration, per-task model routing, and a token-level audit log of every AI call.
 
-The defining property: a build is only "done" once the generated backend compiles, the frontend compiles, and the stack boots against a real PostgreSQL database and answers its health endpoint. The artifact you download is one that provably ran — not one that merely looked plausible.
+The defining property: a build is only "done" once the generated backend compiles, the frontend compiles, and the stack boots against a real PostgreSQL database, answers its health endpoint, exposes a real endpoint in its OpenAPI document, passes a smoke call against that endpoint, and has actually created tables in the database. The artifact you download is one that provably ran — not one that merely looked plausible.
 
 ---
 
@@ -101,13 +101,18 @@ sequenceDiagram
     G->>M: generate whole repository as a JSON file list
     M-->>G: files array of path + content
     G->>G: write files to workspace (path-traversal checked)
+    G->>G: static validation (no container — structure/JSON/XML checks)
 
     loop each verification step
         G->>D: run step in throwaway container
         D-->>G: exit code + stdout/stderr
-        alt step failed
-            loop up to MaxRepairAttempts
-                G->>M: failure log + current repository
+        opt failure is infra (timeout, image pull, daemon, OOM)
+            G->>D: retry directly, no model call<br/>(up to MaxInfraRetries)
+            D-->>G: exit code + stdout/stderr
+        end
+        alt step failed for a code reason
+            loop up to MaxRepairAttempts, stops early if the<br/>failure signature repeats
+                G->>M: failure log + only the files<br/>the diagnostics name
                 M-->>G: only the files that need changing
                 G->>G: overlay changes
                 G->>D: re-run step
@@ -126,27 +131,33 @@ sequenceDiagram
 
 ### Verification steps — the stop condition
 
-Run in order by `ProjectVerifier`. Each is a disposable container; failure output is fed verbatim to the model.
+Run in order by `ProjectStaticValidator` and `ProjectVerifier`. Every step after static validation is a disposable container; failure output is fed back into the repair loop.
 
-| Step | Image | Command | Passes when |
+| Step | Image | Checks | Passes when |
 |---|---|---|---|
-| **Backend build** | `mcr.microsoft.com/dotnet/sdk:10.0` | `dotnet restore && dotnet build -c Release` | compiles clean |
-| **Frontend build** | `node:22-alpine` | `npm install && npm run build` | compiles clean |
-| **Integration run** | SDK image + `postgres:16-alpine` sidecar on a private network | build, start app, poll health | `GET /health` returns 200 within ~90s |
+| **Static validation** | — (no container) | `.csproj`/`package.json`/frontend JSON configs parse; `ProjectReference`s resolve; packages are version-pinned (or use CPM); `docker-compose.yml`/`README.md` exist | all structural checks pass, in milliseconds, before any container starts |
+| **Backend build** | `mcr.microsoft.com/dotnet/sdk:10.0` | `dotnet restore && dotnet build -c Release`, restore cached via a named NuGet volume | compiles clean |
+| **Frontend build** | `node:22-alpine` | `npm install && npm run build`, npm cache mounted from a named volume | compiles clean |
+| **Integration run** | SDK image + `postgres:16-alpine` sidecar on a private network | build, start app, poll health, fetch the OpenAPI document, smoke-test one non-health endpoint, query `information_schema.tables` directly | health answers within ~90s, the OpenAPI document lists a real endpoint, the smoke call isn't a 5xx, **and** the public schema has at least one table |
 
-The integration step is what makes the guarantee meaningful: a real PostgreSQL container comes up on a throwaway Docker network, the generated backend is started against it via `ConnectionStrings__Postgres`, and its health endpoint must answer.
+Static validation catches the boilerplate failures that don't need a container to diagnose — a hallucinated `ProjectReference`, an unversioned `PackageReference`, invalid JSON — for a fraction of the cost of learning the same thing from a failed `dotnet build`.
+
+The integration step is what makes the guarantee meaningful: a real PostgreSQL container comes up on a throwaway Docker network, the generated backend is started against it via `ConnectionStrings__Postgres`, and passing means more than "the process started" — the app has to have created a schema and answer a real request, not just its own health check.
 
 ```mermaid
 flowchart LR
-    START(["generated project"]) --> BE{"Backend<br/>build"}
+    START(["generated project"]) --> SV{"Static<br/>validation"}
+    SV -- fail --> RSV["repair"] --> SV
+    SV -- pass --> BE{"Backend<br/>build"}
     BE -- fail --> RBE["repair"] --> BE
     BE -- pass --> FE{"Frontend<br/>build"}
     FE -- fail --> RFE["repair"] --> FE
-    FE -- pass --> INT{"Boot vs<br/>database"}
+    FE -- pass --> INT{"Boot + OpenAPI +<br/>smoke + schema"}
     INT -- fail --> RINT["repair"] --> INT
     INT -- pass --> ZIP(["zip → MinIO → Ready"])
 
-    RBE -.->|"budget spent<br/>or no file changed"| FAIL(["Failed"])
+    RSV -.->|"budget spent, no file<br/>changed, or same error twice"| FAIL(["Failed"])
+    RBE -.-> FAIL
     RFE -.-> FAIL
     RINT -.-> FAIL
 
@@ -156,19 +167,22 @@ flowchart LR
     class FAIL bad
 ```
 
-The loop breaks early if a repair round returns **no actual file changes** — re-running an identical workspace would burn tokens on a guaranteed-identical failure.
+Each `repair` box is itself two layers: an infrastructure retry (Docker timeout, image pull, daemon blip, OOM kill) runs directly against the sandbox with no model call and doesn't touch the budget below, and only a genuine code failure reaches the model. The model-repair loop breaks early if a round returns **no actual file changes**, or if two consecutive rounds land on the **identical failure signature** (same compiler/lint diagnostic codes) — either way, it isn't making progress and shouldn't burn the rest of its budget restating the same fix.
 
 ### The project layout contract
 
-There is no generic way to decide whether a freshly invented project "builds", so `ProjectLayout.Contract` fixes the structure. The same string is embedded in the **generation prompt** and drives the **verifier**, so the two can never drift:
+There is no generic way to decide whether a freshly invented project "builds", so `ProjectLayout.Contract` fixes the structure. The same string is embedded in the **generation prompt** and drives the **static validator** and **verifier**, so the three can never drift:
 
-- `backend/` — runnable API host project at the directory root, listens on `8080`, exposes `GET /health`, reads `ConnectionStrings__Postgres`
+- `backend/` — runnable API host project at the directory root, listens on `8080`, exposes `GET /health`, reads `ConnectionStrings__Postgres`, and must call `AddOpenApi()`/`MapOpenApi()` **unconditionally** so its OpenAPI document is served at `/openapi/v1.json` with at least one real, unauthenticated `GET` endpoint besides `/health`
 - `frontend/` — `package.json` whose `build` script succeeds non-interactively
 - `docker-compose.yml` and `README.md` at the repository root
+- the app must create real tables on startup even against an empty database — the pipeline checks `information_schema.tables` directly rather than trusting a 200 from `/health`
 
 ### Sandboxing
 
 Generated code is untrusted by construction — it is whatever a model invented. It is **never compiled or executed in the service process**. Every step runs in a throwaway container that is memory-capped (4 GB), bind-mounted only onto its own build workspace, and killed on timeout with partial logs still captured. Model-supplied paths are rejected if absolute or containing `..`, checked twice: once when parsing the reply and again against the resolved path before any file write.
+
+NuGet restore and npm install are backed by named Docker volumes (`vi-ai-nuget-cache`, `vi-ai-npm-cache`) mounted into the build containers, so a repair round — or the next build entirely — doesn't re-download the same packages from a cold container.
 
 ---
 
@@ -273,7 +287,8 @@ vi-ai-studio/
 │  ├─ ai-generator/                 stateless model + build service
 │  │  └─ src/ViAiStudio.AiGenerator/
 │  │     ├─ Providers/                  AzureFoundryModelProvider
-│  │     ├─ Generation/                 ProjectLayout, ProjectCodeGenerator
+│  │     ├─ Generation/                 ProjectLayout, ProjectCodeGenerator, ProjectStaticValidator,
+│  │     │                              DiagnosticFileExtractor, ErrorSignature
 │  │     ├─ Sandbox/                    DockerSandboxExecutor, ProjectVerifier
 │  │     ├─ Builds/                     BuildOrchestrator, BuildWorkspace, queue
 │  │     ├─ Callback/                   progress/completion webhooks
@@ -359,7 +374,11 @@ docker compose -f infra/docker-compose.yml up --build
 | `Sandbox:FrontendImage` | `node:22-alpine` | Frontend build image |
 | `Sandbox:DatabaseImage` | `postgres:16-alpine` | Database sidecar |
 | `Sandbox:CommandTimeout` | `00:15:00` | Ceiling on one sandbox command |
-| `Sandbox:MaxRepairAttempts` | `4` | Repair rounds per failing step |
+| `Sandbox:MaxRepairAttempts` | `4` | Model repair rounds per failing step (only spent on genuine code failures) |
+| `Sandbox:MaxInfraRetries` | `2` | Direct retries per step for infra failures (timeout/image pull/daemon/OOM) — no model call |
+| `Sandbox:InfraRetryDelay` | `00:00:05` | Delay between infra retries |
+| `Sandbox:NugetCacheVolume` | `vi-ai-nuget-cache` | Named Docker volume caching the NuGet global-packages folder |
+| `Sandbox:NpmCacheVolume` | `vi-ai-npm-cache` | Named Docker volume caching npm's package cache |
 | `Storage:*` | — | MinIO (archive upload) |
 | `AiGenerator:WebhookSecret` | — | Must match the api's value |
 
@@ -427,6 +446,10 @@ All `/api/*` routes require a bearer JWT unless noted. `/api/admin/*` additional
 **Progress reporting is best-effort.** A dropped progress webhook logs a warning but never aborts an otherwise-healthy build; only the terminal completion callback is load-bearing.
 
 **Partial artifacts are still archived.** A failed build uploads whatever it produced, so a project that got most of the way is still inspectable rather than silently discarded.
+
+**Infra failures don't spend a repair attempt.** `DockerSandboxExecutor` classifies *why* a step failed — timeout, image pull, daemon unreachable, OOM kill (exit 137), or a genuine non-zero exit — and only the last of those reaches the model. Asking an LLM to "fix" a container timeout is nonsensical and was previously burning both a repair attempt and an LLM call on a problem the code can't fix.
+
+**Repair prompts are diagnosed, not just retried.** `DiagnosticFileExtractor` parses `path(line,col)`-shaped locations out of dotnet/tsc/eslint output and narrows the repair prompt to just the files actually named (plus manifests like `.csproj`/`package.json`), falling back to the whole project only when nothing parses. `ErrorSignature` fingerprints a failure by its diagnostic codes so two repair rounds landing on the identical error stop the loop instead of exhausting the budget re-describing a fix that isn't landing.
 
 ## Known limitations
 

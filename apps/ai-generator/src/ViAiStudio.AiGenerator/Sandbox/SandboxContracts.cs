@@ -1,5 +1,32 @@
 namespace ViAiStudio.AiGenerator.Sandbox;
 
+/// <summary>
+/// Why a sandbox run failed, so callers can tell "the generated code is
+/// broken" (route to the model) apart from "the container/daemon/network
+/// misbehaved" (retry directly -- asking the model to fix a Docker timeout
+/// is nonsensical and wastes a repair attempt).
+/// </summary>
+public enum SandboxFailureKind
+{
+    /// <summary>Not a failure, or a plain non-zero exit from the command itself -- a real code problem.</summary>
+    CommandFailed,
+
+    /// <summary>The command didn't finish inside its allotted time.</summary>
+    Timeout,
+
+    /// <summary>Could not pull the sandbox image (registry hiccup, network blip).</summary>
+    ImagePullFailed,
+
+    /// <summary>Could not reach the Docker daemon at all.</summary>
+    DaemonUnreachable,
+
+    /// <summary>Could not create/start the container even though the daemon answered.</summary>
+    ContainerStartFailed,
+
+    /// <summary>Container was killed for exceeding its memory ceiling (exit code 137).</summary>
+    ContainerOom,
+}
+
 public sealed class SandboxOptions
 {
     /// <summary>
@@ -29,6 +56,27 @@ public sealed class SandboxOptions
 
     /// <summary>How many repair rounds to attempt before giving up on a failing step.</summary>
     public int MaxRepairAttempts { get; set; } = 4;
+
+    /// <summary>
+    /// How many times to retry a step directly -- no model call, no repair
+    /// attempt spent -- when it failed for an infrastructure reason rather
+    /// than a code reason. Kept small: a real outage should surface, not be
+    /// silently absorbed forever.
+    /// </summary>
+    public int MaxInfraRetries { get; set; } = 2;
+
+    /// <summary>Delay between infra retries, to give a transient blip a chance to clear.</summary>
+    public TimeSpan InfraRetryDelay { get; set; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Named Docker volume that caches the NuGet global-packages folder across
+    /// every backend build/restore, so a repair round -- or the next build
+    /// entirely -- doesn't re-download the same packages from a cold container.
+    /// </summary>
+    public string NugetCacheVolume { get; set; } = "vi-ai-nuget-cache";
+
+    /// <summary>Named Docker volume caching npm's package cache across frontend builds.</summary>
+    public string NpmCacheVolume { get; set; } = "vi-ai-npm-cache";
 }
 
 public sealed record SandboxRun(
@@ -38,11 +86,15 @@ public sealed record SandboxRun(
     string? WorkingSubdirectory = null,
     IReadOnlyDictionary<string, string>? Environment = null,
     string? NetworkName = null,
-    TimeSpan? Timeout = null);
+    TimeSpan? Timeout = null,
+    /// <summary>Extra bind mounts beyond the workspace, formatted as Docker expects: "source:target".</summary>
+    IReadOnlyList<string>? AdditionalBinds = null);
 
-public sealed record SandboxRunResult(bool Succeeded, long ExitCode, string Output)
+public sealed record SandboxRunResult(
+    bool Succeeded, long ExitCode, string Output, SandboxFailureKind FailureKind = SandboxFailureKind.CommandFailed)
 {
-    public static SandboxRunResult Failed(string output) => new(false, -1, output);
+    public static SandboxRunResult Failed(string output, SandboxFailureKind kind = SandboxFailureKind.CommandFailed) =>
+        new(false, -1, output, kind);
 }
 
 /// <summary>A throwaway docker network plus any long-running services attached to it.</summary>
