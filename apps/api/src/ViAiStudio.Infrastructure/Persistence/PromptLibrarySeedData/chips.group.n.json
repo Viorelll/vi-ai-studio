@@ -1,0 +1,13 @@
+{
+  "group": "N",
+  "label": "Specification scope",
+  "sheetField": "specScope",
+  "selectMode": "single",
+  "options": [
+    { "value": "platform template only", "isDefault": false },
+    { "value": "full product", "isDefault": true },
+    { "value": "one slice of an existing product", "isDefault": false },
+    { "value": "platform + one module", "isDefault": false }
+  ],
+  "changes": "how many spec files get generated."
+}

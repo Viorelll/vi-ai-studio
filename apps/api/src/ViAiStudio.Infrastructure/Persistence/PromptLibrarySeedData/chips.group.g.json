@@ -1,0 +1,18 @@
+{
+  "group": "G",
+  "label": "Supporting infrastructure",
+  "sheetField": "supportingInfrastructure",
+  "selectMode": "multi",
+  "options": [
+    { "value": "Redis", "isDefault": true },
+    { "value": "RabbitMQ", "isDefault": true },
+    { "value": "Kafka", "isDefault": false },
+    { "value": "Azure Service Bus", "isDefault": false },
+    { "value": "S3-compatible object storage", "isDefault": true },
+    { "value": "search engine", "isDefault": false },
+    { "value": "vector store", "isDefault": false },
+    { "value": "columnar analytics store", "isDefault": false },
+    { "value": "none beyond the database", "isDefault": false }
+  ],
+  "changes": "the compose file, the worker specs, local dev setup."
+}

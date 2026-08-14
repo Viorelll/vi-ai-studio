@@ -1,0 +1,13 @@
+{
+  "group": "D",
+  "label": "Identity model",
+  "sheetField": "identityModel",
+  "selectMode": "single",
+  "options": [
+    { "value": "cookie session", "isDefault": false },
+    { "value": "JWT access + rotating refresh", "isDefault": true },
+    { "value": "external OIDC provider", "isDefault": false },
+    { "value": "both cookie and JWT", "isDefault": false }
+  ],
+  "changes": "the authentication spec, token storage, frontend auth handling."
+}

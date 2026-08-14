@@ -1,0 +1,11 @@
+{
+  "items": [
+    "core entities and their ownership relationships",
+    "role catalogue and the dangerous actions each role may take",
+    "at least three journeys end to end, including their unhappy paths",
+    "at least five invariants stated as \"must never\" or \"must always\"",
+    "a latency number and a scale number",
+    "every external dependency, and which may fail",
+    "recovery expectations (tolerable data loss, tolerable downtime)"
+  ]
+}

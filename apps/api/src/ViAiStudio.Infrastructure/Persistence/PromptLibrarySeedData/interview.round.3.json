@@ -1,0 +1,31 @@
+{
+  "round": 3,
+  "title": "Critical journeys",
+  "questions": [
+    {
+      "order": 1,
+      "prompt": "Describe the first five minutes of a new customer's experience.",
+      "defaultHint": "Sign up, verify email, create a workspace, land on an empty state with one clear next action."
+    },
+    {
+      "order": 2,
+      "prompt": "What is the one action the product exists to make easy?",
+      "defaultHint": "Derived from the product's one-sentence summary."
+    },
+    {
+      "order": 3,
+      "prompt": "What action would cause a support ticket if it went wrong?",
+      "defaultHint": "Losing or corrupting the user's primary data."
+    },
+    {
+      "order": 4,
+      "prompt": "For your top three journeys, what happens on the unhappy path (validation failure, conflict, timeout)?",
+      "defaultHint": "A clear inline error, no data loss, and retrying is always safe."
+    },
+    {
+      "order": 5,
+      "prompt": "Which of these journeys must keep working if a dependency (email, storage, search) is down?",
+      "defaultHint": "Core create/read/update/delete must keep working; notifications may be delayed."
+    }
+  ]
+}

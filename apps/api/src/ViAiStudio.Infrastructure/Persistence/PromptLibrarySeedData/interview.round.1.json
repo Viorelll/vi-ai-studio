@@ -1,0 +1,31 @@
+{
+  "round": 1,
+  "title": "Domain and language",
+  "questions": [
+    {
+      "order": 1,
+      "prompt": "Describe the product in one sentence.",
+      "defaultHint": "A tool that helps <audience> do <core action>."
+    },
+    {
+      "order": 2,
+      "prompt": "List the 5-12 core nouns in your domain, and which of them own which others (e.g. a Workspace owns Projects, a Project owns Tasks).",
+      "defaultHint": "Workspace owns Projects; Project owns Tasks; User; Role."
+    },
+    {
+      "order": 3,
+      "prompt": "Which noun is a URL in your product usually about (e.g. /projects/:id)?",
+      "defaultHint": "The product's primary top-level entity."
+    },
+    {
+      "order": 4,
+      "prompt": "What words do your users actually use for these things? Use their vocabulary, not generic SaaS terms -- the specs will inherit these words verbatim.",
+      "defaultHint": "Use the nouns from the previous answer as-is."
+    },
+    {
+      "order": 5,
+      "prompt": "Does anything in your domain have a lifecycle with named states (e.g. Draft -> In Review -> Published)? List them.",
+      "defaultHint": "None identified yet."
+    }
+  ]
+}

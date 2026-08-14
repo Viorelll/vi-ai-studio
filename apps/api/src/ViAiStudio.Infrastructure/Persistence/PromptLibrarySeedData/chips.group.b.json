@@ -1,0 +1,14 @@
+{
+  "group": "B",
+  "label": "Tenant isolation",
+  "sheetField": "tenantIsolation",
+  "selectMode": "single",
+  "options": [
+    { "value": "single tenant", "isDefault": false },
+    { "value": "shared DB shared schema", "isDefault": true },
+    { "value": "schema per tenant", "isDefault": false },
+    { "value": "database per tenant", "isDefault": false },
+    { "value": "hybrid", "isDefault": false }
+  ],
+  "changes": "the database specs, query filters, provisioning workflow, cost model. Hardest to change later."
+}

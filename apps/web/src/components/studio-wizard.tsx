@@ -1,117 +1,39 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { XIcon, CheckIcon } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Progress } from "@/components/ui/progress";
-import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { StudioArchitectureDiagram } from "@/components/studio-architecture-diagram";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
-import { buildPhaseMarkdown } from "@/lib/wizard-markdown";
-import { ApiError } from "@/lib/api-client";
-import {
-  useDeleteSpecification,
-  useFinalizeSpecification,
-  useGeneratePhaseChips,
-  useGeneratePhaseText,
-  useSaveSpecificationPhase,
-  useUpdateSpecificationBasics,
-} from "@/hooks/use-specifications";
-import type {
-  SpecificationDetail,
-  SpecificationPhase,
-  TechStack,
-} from "@/lib/types";
+import { StudioChipsStage } from "@/components/studio/studio-chips-stage";
+import { StudioInterviewStage } from "@/components/studio/studio-interview-stage";
+import { StudioGenerationStage } from "@/components/studio/studio-generation-stage";
+import { useDeleteSpecification, useUpdateSpecificationBasics } from "@/hooks/use-specifications";
+import { useIntakeSheet } from "@/hooks/use-specification-intake";
+import type { SpecificationDetail } from "@/lib/types";
 
-const TECHNICAL_DESIGN_PHASE_INDEX = 7;
+type Stage = "chips" | "interview" | "generate";
 
-const STACK_FIELDS: {
-  key: keyof TechStack;
-  label: string;
-  options: { value: string; label?: string; disabled?: boolean }[];
-}[] = [
-  {
-    key: "backend",
-    label: "Backend",
-    options: [
-      { value: ".NET Web API" },
-      { value: "Python (coming soon)", disabled: true },
-      { value: "Java (coming soon)", disabled: true },
-    ],
-  },
-  {
-    key: "ui",
-    label: "UI framework",
-    options: [
-      { value: "React + Vite" },
-      { value: "Next.js", label: "Next.js (coming soon)", disabled: true },
-      { value: "Angular (coming soon)", disabled: true },
-      { value: "Blazor (coming soon)", disabled: true },
-    ],
-  },
-  {
-    key: "database",
-    label: "Database",
-    options: [
-      { value: "PostgreSQL" },
-      { value: "SQL Server (coming soon)", disabled: true },
-    ],
-  },
-  {
-    key: "infra",
-    label: "Containerization",
-    options: [
-      { value: "Docker" },
-      { value: "Kubernetes (coming soon)", disabled: true },
-    ],
-  },
-  {
-    key: "uiStyle",
-    label: "UI style",
-    options: [
-      { value: "Tailwind" },
-      { value: "Bootstrap (coming soon)", disabled: true },
-    ],
-  },
-];
-
+/**
+ * Thin stage router for the specification authoring pipeline: chip
+ * selection -> domain interview -> batch generation. Which stage is active
+ * derives from the intake sheet's completion flags; `stageOverride` only
+ * lets the user revisit an already-reached stage via the stepper.
+ */
 export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const updateBasics = useUpdateSpecificationBasics(spec.id);
-  const savePhase = useSaveSpecificationPhase(spec.id);
-  const generatePhaseText = useGeneratePhaseText(spec.id);
-  const generatePhaseChips = useGeneratePhaseChips(spec.id);
-  const finalizeSpecification = useFinalizeSpecification(spec.id);
   const deleteSpecification = useDeleteSpecification();
+  const intakeQuery = useIntakeSheet(spec.id);
 
   const [name, setName] = useState(spec.name);
   const [summary, setSummary] = useState(spec.summary);
-  const [stack, setStack] = useState<TechStack>(spec.stack);
-  const [phases, setPhases] = useState<SpecificationPhase[]>(
-    [...spec.phases].sort((a, b) => a.phaseIndex - b.phaseIndex),
-  );
-  const [activePhaseIndex, setActivePhaseIndex] = useState(0);
-  const [activeItemIndex, setActiveItemIndex] = useState(0);
-  const [finalizing, setFinalizing] = useState(false);
   const [leaving, setLeaving] = useState(false);
-  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [stageOverride, setStageOverride] = useState<Stage | null>(null);
 
   const nameMissing = name.trim().length === 0;
   const summaryMissing = summary.trim().length === 0;
@@ -164,188 +86,33 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const activePhase = phases[activePhaseIndex];
-  const activeItem = activePhase.items[activeItemIndex] as string | undefined;
-
-  const [chips, setChips] = useState<string[]>([]);
-  const [chipsLoading, setChipsLoading] = useState(false);
-  const [chipsError, setChipsError] = useState<string | null>(null);
-  const [chipsRefreshKey, setChipsRefreshKey] = useState(0);
-  const chipsCacheRef = useRef<Map<string, string[]>>(new Map());
-
-  // Auto-generates keyword-chip suggestions for whichever step is in view,
-  // as soon as the mandatory project basics are filled in -- no button
-  // click needed. Cached per phase+step so revisiting one doesn't re-ask.
-  useEffect(() => {
-    if (basicsIncomplete || !activeItem) {
-      setChips([]);
-      setChipsError(null);
-      return;
-    }
-    const key = `${activePhase.phaseIndex}:${activeItemIndex}`;
-    const cached = chipsCacheRef.current.get(key);
-    if (cached) {
-      setChips(cached);
-      setChipsError(null);
-      return;
-    }
-    let cancelled = false;
-    setChipsLoading(true);
-    setChipsError(null);
-    generatePhaseChips
-      .mutateAsync({ phaseIndex: activePhase.phaseIndex, stepName: activeItem })
-      .then((result) => {
-        if (cancelled) return;
-        chipsCacheRef.current.set(key, result.chips);
-        setChips(result.chips);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setChips([]);
-        setChipsError(
-          err instanceof ApiError
-            ? err.message
-            : "Couldn't generate suggestions for this step.",
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setChipsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [basicsIncomplete, activePhase.phaseIndex, activeItemIndex, activeItem, chipsRefreshKey]);
-
-  function regenerateChips() {
-    if (!activeItem) return;
-    chipsCacheRef.current.delete(`${activePhase.phaseIndex}:${activeItemIndex}`);
-    setChipsRefreshKey((n) => n + 1);
-  }
-
-  const completedPhaseCount = useMemo(
-    () =>
-      phases.filter(
-        (p) => p.items.length > 0 && p.checkedItems.length === p.items.length,
-      ).length,
-    [phases],
-  );
-  const wizardProgressPct =
-    phases.length === 0
-      ? 0
-      : Math.round((completedPhaseCount / phases.length) * 100);
-
-  function updatePhase(index: number, patch: Partial<SpecificationPhase>) {
-    setPhases((prev) => {
-      const next = prev.map((p, i) => (i === index ? { ...p, ...patch } : p));
-      const phase = next[index];
-      savePhase.mutate({
-        phaseIndex: phase.phaseIndex,
-        checkedItems: phase.checkedItems,
-        selectedKeywords: phase.selectedKeywords,
-      });
-      return next;
-    });
-  }
-
-  function toggleCurrentItem() {
-    if (!activeItem) return;
-    const checked = activePhase.checkedItems.includes(activeItem)
-      ? activePhase.checkedItems.filter((i) => i !== activeItem)
-      : [...activePhase.checkedItems, activeItem];
-    updatePhase(activePhaseIndex, { checkedItems: checked });
-  }
-
-  function toggleKeyword(keyword: string) {
-    const selected = activePhase.selectedKeywords.includes(keyword)
-      ? activePhase.selectedKeywords.filter((k) => k !== keyword)
-      : [...activePhase.selectedKeywords, keyword];
-    updatePhase(activePhaseIndex, {
-      selectedKeywords: selected,
-      generatedText: null,
-    });
-  }
-
-  function jumpPhase(index: number) {
-    setActivePhaseIndex(index);
-    setActiveItemIndex(0);
-    setGenerateError(null);
-  }
-
-  async function generate() {
-    setGenerateError(null);
-    try {
-      const updated = await generatePhaseText.mutateAsync(
-        activePhase.phaseIndex,
-      );
-      const checkedItems =
-        activeItem && !activePhase.checkedItems.includes(activeItem)
-          ? [...activePhase.checkedItems, activeItem]
-          : activePhase.checkedItems;
-      updatePhase(activePhaseIndex, {
-        generatedText: updated.generatedText,
-        checkedItems,
-      });
-    } catch (err) {
-      setGenerateError(
-        err instanceof ApiError
-          ? err.message
-          : "Something went wrong generating this phase.",
-      );
-    }
-  }
-
   function saveBasics() {
-    updateBasics.mutate({ name, summary, stack });
+    updateBasics.mutate({ name, summary });
   }
 
-  function updateStackField(key: keyof TechStack, value: string) {
-    const next = { ...stack, [key]: value };
-    setStack(next);
-    updateBasics.mutate({ stack: next });
+  function refreshIntake() {
+    queryClient.invalidateQueries({ queryKey: ["specifications", spec.id, "intake"] });
+    setStageOverride(null);
   }
 
-  async function back() {
-    if (activeItemIndex > 0) {
-      setActiveItemIndex(activeItemIndex - 1);
-      return;
-    }
-    if (activePhaseIndex === 0) {
-      await leaveStudio(`/specifications/${spec.id}`, "/specifications");
-      return;
-    }
-    const prevIndex = activePhaseIndex - 1;
-    setActivePhaseIndex(prevIndex);
-    setActiveItemIndex(Math.max(0, phases[prevIndex].items.length - 1));
-    setGenerateError(null);
+  if (intakeQuery.isPending) {
+    return <div className="p-10 text-sm text-muted-foreground">Loading…</div>;
   }
 
-  async function next() {
-    if (activeItemIndex < activePhase.items.length - 1) {
-      setActiveItemIndex(activeItemIndex + 1);
-      return;
-    }
-    if (activePhaseIndex < phases.length - 1) {
-      setActivePhaseIndex(activePhaseIndex + 1);
-      setActiveItemIndex(0);
-      setGenerateError(null);
-      return;
-    }
-    setFinalizing(true);
-    try {
-      await finalizeSpecification.mutateAsync();
-      navigate(`/specifications/${spec.id}`);
-    } finally {
-      setFinalizing(false);
-    }
-  }
+  const intake = intakeQuery.data ?? null;
+  const chipsDone = Boolean(intake?.completedAt);
+  const interviewDone = Boolean(intake?.interviewCompletedAt);
+  const derivedStage: Stage = !chipsDone ? "chips" : !interviewDone ? "interview" : "generate";
+  const stage = stageOverride ?? derivedStage;
 
-  const isLastStep =
-    activePhaseIndex === phases.length - 1 &&
-    activeItemIndex === activePhase.items.length - 1;
+  const steps: { key: Stage; label: string; reached: boolean }[] = [
+    { key: "chips", label: "1. Shape", reached: true },
+    { key: "interview", label: "2. Interview", reached: chipsDone },
+    { key: "generate", label: "3. Generate", reached: interviewDone },
+  ];
 
   return (
-    <div className="w-full max-w-[1160px] mx-auto">
+    <div className="w-full max-w-225 mx-auto">
       <div className="flex items-center justify-between mb-4">
         <div>
           <PageBreadcrumb items={[{ label: "AI Specification Studio" }]} />
@@ -371,288 +138,79 @@ export function StudioWizard({ spec }: { spec: SpecificationDetail }) {
         </Tooltip>
       </div>
 
-      <div className="flex items-center gap-3 mb-6">
-        <Progress value={wizardProgressPct} className="flex-1 h-1.5" />
-        <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {completedPhaseCount} / {phases.length} phases complete
-        </span>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[270px_1fr] gap-6 items-start">
-        <Card className="gap-0 rounded-[12px] p-4">
-          <div className="text-[13px] font-semibold mb-2.5">Project basics</div>
-          <div className="flex flex-col gap-2.5 mb-4">
-            <Field className="gap-1.5">
-              <FieldLabel htmlFor="studio-project-name" className="sr-only">
-                Project name (required)
-              </FieldLabel>
-              <Input
-                id="studio-project-name"
-                placeholder="Project name *"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onBlur={saveBasics}
-                required
-                aria-invalid={nameMissing}
-              />
-            </Field>
-            <Field className="gap-1.5">
-              <FieldLabel htmlFor="studio-project-summary" className="sr-only">
-                One-line summary (required)
-              </FieldLabel>
-              <Input
-                id="studio-project-summary"
-                placeholder="One-line summary *"
-                value={summary}
-                onChange={(e) => setSummary(e.target.value)}
-                onBlur={saveBasics}
-                required
-                aria-invalid={summaryMissing}
-              />
-            </Field>
-            {basicsIncomplete && (
-              <p className="text-[11px] text-destructive">
-                Name and summary are required to start the wizard.
-              </p>
-            )}
-            {STACK_FIELDS.map((field) => (
-              <Field key={field.key} className="gap-1">
-                <FieldLabel
-                  htmlFor={`studio-stack-${field.key}`}
-                  className="text-[11px] text-muted-foreground"
-                >
-                  {field.label}
-                </FieldLabel>
-                <Select
-                  value={stack[field.key]}
-                  onValueChange={(v) => v && updateStackField(field.key, v)}
-                >
-                  <SelectTrigger
-                    id={`studio-stack-${field.key}`}
-                    className="w-full"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {field.options.map((opt) => (
-                      <SelectItem
-                        key={opt.value}
-                        value={opt.value}
-                        disabled={opt.disabled}
-                      >
-                        {opt.label ?? opt.value}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            ))}
-          </div>
-
-          <Separator className="mb-3" />
-          <div className="text-[11px] font-semibold text-[#a1a1aa] uppercase tracking-wide mb-2">
-            {phases.length} phase{phases.length === 1 ? "" : "s"}
-          </div>
-          <ScrollArea className="h-[520px]">
-            <div className="flex flex-col gap-0.5 pr-2">
-              {phases.map((phase, index) => {
-                const complete =
-                  phase.checkedItems.length === phase.items.length &&
-                  phase.items.length > 0;
-                const active = index === activePhaseIndex;
-                return (
-                  <Button
-                    key={phase.phaseIndex}
-                    type="button"
-                    variant="ghost"
-                    onClick={() => jumpPhase(index)}
-                    disabled={basicsIncomplete}
-                    className={`h-auto w-full justify-start gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-[#f4f4f5] ${active ? "bg-[#f4f4f5]" : ""}`}
-                    aria-current={active ? "step" : undefined}
-                  >
-                    {/*
-                      The design hardcodes the completed-checkmark circle to
-                      #18181b regardless of the chosen team accent -- only
-                      primary actions (buttons, progress bars) track the
-                      accent, structural status dots stay a fixed dark neutral.
-                    */}
-                    <span
-                      className={`text-[10.5px] font-bold size-5 rounded-full shrink-0 flex items-center justify-center border ${
-                        complete
-                          ? "bg-[#18181b] text-white border-[#18181b]"
-                          : active
-                            ? "bg-[#eff6ff] text-[#1d4ed8] border-[#bfdbfe]"
-                            : "bg-white text-[#a1a1aa] border-[#e4e4e7]"
-                      }`}
-                    >
-                      {complete ? <CheckIcon className="size-3" /> : index + 1}
-                    </span>
-                    <span
-                      className={`text-[12.5px] font-medium flex-1 ${active ? "text-[#18181b]" : "text-[#52525b]"}`}
-                    >
-                      {phase.title}
-                    </span>
-                    <span className="text-[11px] text-[#a1a1aa]">
-                      {phase.checkedItems.length}/{phase.items.length}
-                    </span>
-                  </Button>
-                );
-              })}
-            </div>
-          </ScrollArea>
-        </Card>
-
-        <Card className="gap-0 rounded-[12px] p-7">
-          <div className="text-xs font-semibold text-[#71717a] uppercase tracking-wide mb-1">
-            Phase {activePhaseIndex + 1} of {phases.length}
-          </div>
-          <h2 className="text-xl font-bold tracking-tight mb-1.5">
-            {activePhase.title}
-          </h2>
-          <p className="text-sm text-[#71717a] mb-5">
-            Produces: {activePhase.output}
-          </p>
-
-          {basicsIncomplete && (
-            <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[12.5px] text-amber-800">
-              Set a project name and summary in the panel on the left to
-              unlock this wizard.
-            </div>
-          )}
-
-          <div className="flex gap-1.5 mb-3.5">
-            {activePhase.items.map((item, itemIdx) => {
-              const checked = activePhase.checkedItems.includes(item);
-              return (
-                <div
-                  key={item}
-                  className={`h-1 flex-1 rounded-full ${
-                    checked
-                      ? "bg-[var(--brand)]"
-                      : itemIdx === activeItemIndex
-                        ? "bg-[#93c5fd]"
-                        : "bg-[#e4e4e7]"
-                  }`}
-                />
-              );
-            })}
-          </div>
-
-          <div className="text-[11px] font-semibold text-[#a1a1aa] uppercase tracking-wide mb-2.5">
-            Step {activeItemIndex + 1} of {activePhase.items.length}
-          </div>
-
-          {activeItem && (
-            <Label
-              htmlFor={`studio-item-${activePhase.phaseIndex}-${activeItemIndex}`}
-              className="flex w-full cursor-pointer items-center gap-3.5 rounded-lg border border-[#e4e4e7] p-5 text-left hover:border-[#a1a1aa]"
-            >
-              <Checkbox
-                id={`studio-item-${activePhase.phaseIndex}-${activeItemIndex}`}
-                checked={activePhase.checkedItems.includes(activeItem)}
-                onCheckedChange={toggleCurrentItem}
-                disabled={basicsIncomplete}
-                aria-label={`Mark ${activeItem} complete`}
-                className={`size-6.5 rounded-md text-white ${
-                  activePhase.checkedItems.includes(activeItem)
-                    ? "border-[var(--brand)] bg-[var(--brand)]"
-                    : "border-[#d4d4d8] bg-white"
-                }`}
-              />
-              <span className="text-base font-semibold">{activeItem}</span>
-            </Label>
-          )}
-
-          <div className="flex items-center justify-between mb-2">
-            <Label className="text-[13px] font-semibold">Keywords</Label>
-            <Button
+      <div className="flex items-center gap-2 mb-6">
+        {steps.map((s) => {
+          const active = stage === s.key;
+          return (
+            <button
+              key={s.key}
               type="button"
-              size="sm"
-              onClick={regenerateChips}
-              disabled={basicsIncomplete || chipsLoading || !activeItem}
+              disabled={!s.reached}
+              onClick={() => s.reached && setStageOverride(s.key)}
+              className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
+                active
+                  ? "bg-[var(--brand)] text-white border-[var(--brand)]"
+                  : s.reached
+                    ? "border-[#e4e4e7] text-[#3f3f46] hover:bg-[#f4f4f5]"
+                    : "border-[#e4e4e7] text-[#a1a1aa] cursor-not-allowed"
+              }`}
             >
-              {chipsLoading ? "Generating…" : "Generate"}
-            </Button>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5 mb-5">
-            {chipsLoading && (
-              <span className="text-[12.5px] text-muted-foreground">
-                Generating suggestions…
-              </span>
-            )}
-            {!chipsLoading && chipsError && (
-              <span className="text-[12.5px] text-destructive">
-                {chipsError}
-              </span>
-            )}
-            {/* Selected keyword chips are hardcoded dark like the phase circles above, not accent-driven. */}
-            {!chipsLoading &&
-              !chipsError &&
-              chips.map((keyword) => {
-                const selected = activePhase.selectedKeywords.includes(keyword);
-                return (
-                  <Button
-                    key={keyword}
-                    type="button"
-                    variant="outline"
-                    onClick={() => toggleKeyword(keyword)}
-                    disabled={basicsIncomplete}
-                    className={`h-auto rounded-full px-3 py-1.5 text-[12.5px] font-medium whitespace-nowrap ${
-                      selected
-                        ? "border-[#18181b] bg-[#18181b] text-white hover:bg-[#18181b] hover:text-white"
-                        : "border-[#e4e4e7] bg-white text-[#3f3f46] hover:bg-[#f4f4f5]"
-                    }`}
-                    aria-pressed={selected}
-                  >
-                    {keyword}
-                  </Button>
-                );
-              })}
-          </div>
-
-          {activePhase.phaseIndex === TECHNICAL_DESIGN_PHASE_INDEX && (
-            <div className="mb-5">
-              <Label className="text-[13px] font-semibold mb-2.5">
-                Architecture diagram
-              </Label>
-              <StudioArchitectureDiagram />
-            </div>
-          )}
-
-          <div className="flex items-center justify-between mb-1.5">
-            <Label className="text-[13px] font-semibold">Preview (.md)</Label>
-            <Button
-              size="sm"
-              onClick={generate}
-              disabled={generatePhaseText.isPending || basicsIncomplete}
-            >
-              {generatePhaseText.isPending ? "Generating…" : "Generate"}
-            </Button>
-          </div>
-          {generateError && (
-            <p className="mb-2 text-[12.5px] text-destructive">
-              {generateError}
-            </p>
-          )}
-          <ScrollArea className="h-[220px] w-full rounded-lg border bg-muted/30">
-            <pre className="p-3.5 text-[12.5px] font-mono leading-relaxed text-foreground/80 whitespace-pre-wrap">
-              {buildPhaseMarkdown(activePhase)}
-            </pre>
-          </ScrollArea>
-
-          <div className="flex justify-between mt-6">
-            <Button variant="outline" onClick={back} disabled={leaving}>
-              {leaving ? "Discarding…" : "Back"}
-            </Button>
-            <Button
-              onClick={next}
-              disabled={finalizing || leaving || basicsIncomplete}
-            >
-              {finalizing ? "Finalizing…" : isLastStep ? "Finish" : "Next"}
-            </Button>
-          </div>
-        </Card>
+              {s.label}
+            </button>
+          );
+        })}
       </div>
+
+      <Card className="gap-0 rounded-[12px] p-4 mb-5">
+        <div className="text-[13px] font-semibold mb-2.5">Project basics</div>
+        <div className="grid grid-cols-2 gap-2.5">
+          <Field className="gap-1.5">
+            <FieldLabel htmlFor="studio-project-name" className="sr-only">
+              Project name (required)
+            </FieldLabel>
+            <Input
+              id="studio-project-name"
+              placeholder="Project name *"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={saveBasics}
+              required
+              aria-invalid={nameMissing}
+            />
+          </Field>
+          <Field className="gap-1.5">
+            <FieldLabel htmlFor="studio-project-summary" className="sr-only">
+              One-line summary (required)
+            </FieldLabel>
+            <Input
+              id="studio-project-summary"
+              placeholder="One-line summary *"
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
+              onBlur={saveBasics}
+              required
+              aria-invalid={summaryMissing}
+            />
+          </Field>
+        </div>
+        {basicsIncomplete && (
+          <p className="text-[11px] text-destructive mt-2">
+            Name and summary are required to start the wizard.
+          </p>
+        )}
+      </Card>
+
+      {basicsIncomplete ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[12.5px] text-amber-800">
+          Set a project name and summary above to unlock this wizard.
+        </div>
+      ) : stage === "chips" ? (
+        <StudioChipsStage specId={spec.id} intakeSheet={intake} onSaved={refreshIntake} />
+      ) : stage === "interview" ? (
+        <StudioInterviewStage specId={spec.id} onCompleted={refreshIntake} />
+      ) : (
+        <StudioGenerationStage specId={spec.id} />
+      )}
     </div>
   );
 }

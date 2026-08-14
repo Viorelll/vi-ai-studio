@@ -17,6 +17,7 @@ public sealed record StartBuildCommand(Guid SpecificationId, Guid? AiModelConfig
 /// </summary>
 public sealed class StartBuildHandler(
     ISpecificationRepository specificationRepository,
+    ISpecificationDocumentRepository documentRepository,
     IGenerationRepository generationRepository,
     ITaskRoutingRepository taskRoutingRepository,
     IAiModelConfigRepository aiModelConfigRepository,
@@ -32,9 +33,9 @@ public sealed class StartBuildHandler(
             throw new InvalidOperationException("A build is already running for this specification.");
         }
 
-        if (string.IsNullOrWhiteSpace(specification.SpecMarkdown))
+        if (specification.Status != SpecificationStatus.Ready)
         {
-            throw new InvalidOperationException("Finalize the specification before starting AI Build.");
+            throw new InvalidOperationException("Generate the specification before starting AI Build.");
         }
 
         var configId = command.AiModelConfigId
@@ -65,10 +66,11 @@ public sealed class StartBuildHandler(
 
         try
         {
+            var documents = await documentRepository.ListAllAsync(specification.Id, cancellationToken);
             await aiGeneratorClient.StartBuildAsync(
                 generation.Id,
                 ModelCredentials.FromConfig(config),
-                BuildSpecificationFor(specification),
+                BuildSpecificationFor(specification, documents),
                 cancellationToken);
         }
         catch (Exception ex)
@@ -82,20 +84,23 @@ public sealed class StartBuildHandler(
     }
 
     /// <summary>
-    /// The complete brief handed to AI Generator: the authored basics plus both
-    /// renderings of the specification -- the single flattened markdown and the
-    /// per-phase document set the download bundle is made of -- so the model
-    /// generating the project sees everything the wizard captured.
+    /// The complete brief handed to AI Generator: the authored basics plus the
+    /// full set of generated specification documents (see
+    /// SpecificationDocument), so the model generating the project sees
+    /// everything the authoring pipeline produced. AI Generator's
+    /// ProjectCodeGenerator still concatenates a top-level `SpecMarkdown`
+    /// blob into its own prompt alongside the per-document contracts; since
+    /// the authoring pipeline no longer renders one flattened blob, the name
+    /// and summary stand in for it here.
     /// </summary>
-    private static BuildSpecification BuildSpecificationFor(Specification specification) => new(
+    private static BuildSpecification BuildSpecificationFor(
+        Specification specification, IReadOnlyList<Domain.Entities.SpecificationDocument> documents) => new(
         specification.Name,
         specification.Summary,
         specification.Description,
         specification.Audience,
         specification.Features,
-        specification.SpecMarkdown!,
+        $"{specification.Name}\n\n{specification.Summary}",
         specification.Stack,
-        SpecificationDocumentSet.Build(specification)
-            .Select(d => new BuildSpecificationDocument(d.Path, d.Content))
-            .ToList());
+        documents.Select(d => new BuildSpecificationDocument(d.Path, d.Content)).ToList());
 }

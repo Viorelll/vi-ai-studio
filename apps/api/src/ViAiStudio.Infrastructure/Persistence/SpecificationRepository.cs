@@ -18,10 +18,17 @@ public sealed class SpecificationRepository(ViAiStudioDbContext dbContext) : ISp
         return Task.CompletedTask;
     }
 
+    public Task AddNewChildAsync<TChild>(TChild child, CancellationToken cancellationToken) where TChild : class
+    {
+        dbContext.Set<TChild>().Add(child);
+        return Task.CompletedTask;
+    }
+
     public Task<Specification?> GetAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.Specifications
-            .Include(s => s.Phases)
             .Include(s => s.Generations)
+            .Include(s => s.Intake)
+            .Include(s => s.InterviewAnswers)
             .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
 
     public Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken) =>

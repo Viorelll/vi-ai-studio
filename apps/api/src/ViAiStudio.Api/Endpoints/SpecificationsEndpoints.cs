@@ -1,10 +1,7 @@
-using System.IO.Compression;
-using System.Text;
 using System.Text.RegularExpressions;
 using ViAiStudio.Api.Contracts;
 using ViAiStudio.Application.Common;
 using ViAiStudio.Application.Specifications;
-using ViAiStudio.Domain.Catalog;
 
 namespace ViAiStudio.Api.Endpoints;
 
@@ -12,10 +9,6 @@ public static class SpecificationsEndpoints
 {
     public static void MapSpecificationsEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/specification-phase-catalog", () =>
-            Results.Ok(SpecificationPhaseCatalog.Phases.Select(SpecificationPhaseDefinitionResponse.FromDefinition)))
-            .RequireAuthorization();
-
         var group = app.MapGroup("/api/specifications").RequireAuthorization();
 
         group.MapGet("/", async (ISpecificationRepository repository, CancellationToken cancellationToken) =>
@@ -50,60 +43,51 @@ public static class SpecificationsEndpoints
             return deleted ? Results.NoContent() : Results.NotFound();
         });
 
-        group.MapPut("/{id:guid}/phases/{phaseIndex:int}", async (
-            Guid id, int phaseIndex, SaveSpecificationPhaseRequest request, SaveSpecificationPhaseHandler handler, CancellationToken cancellationToken) =>
+        // Backs the "Specifications (.md)" file tree + preview pane on the spec
+        // detail page and the wizard's live file list. Documents are persisted
+        // rows (written by the stage-3 batch loop, see
+        // RunSpecificationGenerationHandler), so these are direct, cheap reads --
+        // no MinIO round-trip and no on-the-fly rendering needed here.
+        group.MapGet("/{id:guid}/documents", async (
+            Guid id, ISpecificationRepository repository, ISpecificationDocumentRepository documentRepository, CancellationToken cancellationToken) =>
         {
-            var command = new SaveSpecificationPhaseCommand(id, phaseIndex, request.CheckedItems, request.SelectedKeywords);
-            var phase = await handler.HandleAsync(command, cancellationToken);
-            return Results.Ok(SpecificationPhaseResponse.FromEntity(phase));
+            if (!await repository.ExistsAsync(id, cancellationToken))
+            {
+                return Results.NotFound();
+            }
+            var documents = await documentRepository.ListAsync(id, cancellationToken);
+            return Results.Ok(documents.Select(d => d.Path));
         });
 
-        group.MapPost("/{id:guid}/phases/{phaseIndex:int}/generate", async (
-            Guid id, int phaseIndex, GeneratePhaseTextHandler handler, CancellationToken cancellationToken) =>
+        group.MapGet("/{id:guid}/documents/content", async (
+            Guid id, string path, ISpecificationDocumentRepository documentRepository, CancellationToken cancellationToken) =>
         {
-            var phase = await handler.HandleAsync(new GeneratePhaseTextCommand(id, phaseIndex), cancellationToken);
-            return Results.Ok(SpecificationPhaseResponse.FromEntity(phase));
+            var document = await documentRepository.GetAsync(id, path, cancellationToken);
+            if (document is null)
+            {
+                return Results.NotFound();
+            }
+            return Results.Ok(new { path = document.Path, content = document.Content });
         });
 
-        group.MapPost("/{id:guid}/phases/{phaseIndex:int}/chips", async (
-            Guid id, int phaseIndex, GeneratePhaseChipsRequest request, GeneratePhaseChipsHandler handler, CancellationToken cancellationToken) =>
-        {
-            var chips = await handler.HandleAsync(new GeneratePhaseChipsCommand(id, phaseIndex, request.StepName), cancellationToken);
-            return Results.Ok(new GeneratePhaseChipsResponse(chips));
-        });
-
-        group.MapPost("/{id:guid}/finalize", async (Guid id, FinalizeSpecificationHandler handler, CancellationToken cancellationToken) =>
-        {
-            var specification = await handler.HandleAsync(new FinalizeSpecificationCommand(id), cancellationToken);
-            return Results.Ok(SpecificationDetailResponse.FromEntity(specification));
-        });
-
-        group.MapGet("/{id:guid}/download", async (Guid id, ISpecificationRepository repository, CancellationToken cancellationToken) =>
+        // Streams the archive the batch loop already zipped and uploaded to
+        // MinIO after the last completed batch -- never rebuilt on GET.
+        group.MapGet("/{id:guid}/download", async (
+            Guid id, ISpecificationRepository repository, IBlobStorage blobStorage, CancellationToken cancellationToken) =>
         {
             var specification = await repository.GetAsync(id, cancellationToken);
             if (specification is null)
             {
                 return Results.NotFound();
             }
-            if (string.IsNullOrWhiteSpace(specification.SpecMarkdown))
+            if (string.IsNullOrWhiteSpace(specification.DocumentsArchiveStorageKey))
             {
-                return Results.BadRequest(new { error = "Finalize the specification before downloading it." });
+                return Results.BadRequest(new { error = "Generate the specification before downloading it." });
             }
 
-            using var stream = new MemoryStream();
-            using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
-            {
-                foreach (var document in SpecificationDocumentSet.Build(specification))
-                {
-                    var entry = zip.CreateEntry(document.Path, CompressionLevel.Fastest);
-                    await using var entryStream = entry.Open();
-                    await using var writer = new StreamWriter(entryStream, Encoding.UTF8);
-                    await writer.WriteAsync(document.Content);
-                }
-            }
-
+            var archive = await blobStorage.DownloadAsync(specification.DocumentsArchiveStorageKey, cancellationToken);
             var fileName = Slugify(specification.Name) + "-specification.zip";
-            return Results.File(stream.ToArray(), "application/zip", fileName);
+            return Results.File(archive, "application/zip", fileName);
         });
     }
 

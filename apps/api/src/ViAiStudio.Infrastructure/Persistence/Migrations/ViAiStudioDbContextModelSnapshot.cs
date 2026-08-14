@@ -229,6 +229,13 @@ namespace ViAiStudio.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("DocumentPaths")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("DocumentsArchiveStorageKey")
+                        .HasColumnType("text");
+
                     b.Property<string>("Features")
                         .IsRequired()
                         .HasColumnType("text");
@@ -244,9 +251,6 @@ namespace ViAiStudio.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Progress")
                         .HasColumnType("integer");
-
-                    b.Property<string>("SpecMarkdown")
-                        .HasColumnType("text");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -297,35 +301,381 @@ namespace ViAiStudio.Infrastructure.Persistence.Migrations
                     b.ToTable("Specifications");
                 });
 
-            modelBuilder.Entity("ViAiStudio.Domain.Entities.SpecificationPhase", b =>
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.SpecificationDocument", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("CheckedItems")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("uuid");
 
-                    b.Property<string>("GeneratedText")
+                    b.Property<string>("Component")
+                        .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("PhaseIndex")
-                        .HasColumnType("integer");
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
 
-                    b.Property<string>("SelectedKeywords")
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DependsOn")
                         .IsRequired()
                         .HasColumnType("jsonb");
+
+                    b.Property<string>("Generates")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Provides")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("SpecId")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("SpecificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SpecificationId", "Path")
+                        .IsUnique();
+
+                    b.ToTable("SpecificationDocuments");
+                });
+
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.SpecificationGenerationBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AllocatedIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("BatchIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FilesWritten")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RunId", "BatchIndex")
+                        .IsUnique();
+
+                    b.ToTable("SpecificationGenerationBatches");
+                });
+
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.SpecificationGenerationRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("DurationSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("SpecificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SpecificationId");
+
+                    b.ToTable("SpecificationGenerationRuns");
+                });
+
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.SpecificationIntakeSheet", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Compliance")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ConflictsResolved")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Deployables")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Environments")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Frontend")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FrontendRequirements")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("FunctionalAreas")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("IdentityFeatures")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("IdentityModel")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ImpliedDecisions")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("InterviewCompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PrimaryDatabase")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProductShape")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Rigour")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SpecScope")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("SpecificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("StillUnknown")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("SupportingInfrastructure")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Team")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TenantIsolation")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SpecificationId")
+                        .IsUnique();
+
+                    b.ToTable("SpecificationIntakeSheets");
+                });
+
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.SpecificationInterviewAnswer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("AiExpandedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AnswerText")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DefaultHint")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("QuestionIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("QuestionText")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("RoundIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SpecificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("UsedDefault")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SpecificationId", "RoundIndex", "QuestionIndex")
+                        .IsUnique();
+
+                    b.ToTable("SpecificationInterviewAnswers");
+                });
+
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.SpecificationPromptTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Stage")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("SpecificationPromptTemplates");
+                });
+
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.SpecificationValidationIssue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DocumentPath")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<Guid>("SpecificationId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SpecificationId", "PhaseIndex")
-                        .IsUnique();
+                    b.HasIndex("SpecificationId");
 
-                    b.ToTable("SpecificationPhases", (string)null);
+                    b.ToTable("SpecificationValidationIssues");
                 });
 
             modelBuilder.Entity("ViAiStudio.Domain.Entities.TaskRouting", b =>
@@ -433,10 +783,46 @@ namespace ViAiStudio.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("ViAiStudio.Domain.Entities.SpecificationPhase", b =>
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.SpecificationDocument", b =>
                 {
                     b.HasOne("ViAiStudio.Domain.Entities.Specification", null)
-                        .WithMany("Phases")
+                        .WithMany("Documents")
+                        .HasForeignKey("SpecificationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.SpecificationGenerationBatch", b =>
+                {
+                    b.HasOne("ViAiStudio.Domain.Entities.SpecificationGenerationRun", null)
+                        .WithMany("Batches")
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.SpecificationGenerationRun", b =>
+                {
+                    b.HasOne("ViAiStudio.Domain.Entities.Specification", null)
+                        .WithMany("GenerationRuns")
+                        .HasForeignKey("SpecificationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.SpecificationIntakeSheet", b =>
+                {
+                    b.HasOne("ViAiStudio.Domain.Entities.Specification", null)
+                        .WithOne("Intake")
+                        .HasForeignKey("ViAiStudio.Domain.Entities.SpecificationIntakeSheet", "SpecificationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.SpecificationInterviewAnswer", b =>
+                {
+                    b.HasOne("ViAiStudio.Domain.Entities.Specification", null)
+                        .WithMany("InterviewAnswers")
                         .HasForeignKey("SpecificationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -487,9 +873,20 @@ namespace ViAiStudio.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("ViAiStudio.Domain.Entities.Specification", b =>
                 {
+                    b.Navigation("Documents");
+
+                    b.Navigation("GenerationRuns");
+
                     b.Navigation("Generations");
 
-                    b.Navigation("Phases");
+                    b.Navigation("Intake");
+
+                    b.Navigation("InterviewAnswers");
+                });
+
+            modelBuilder.Entity("ViAiStudio.Domain.Entities.SpecificationGenerationRun", b =>
+                {
+                    b.Navigation("Batches");
                 });
 
             modelBuilder.Entity("ViAiStudio.Domain.Entities.User", b =>

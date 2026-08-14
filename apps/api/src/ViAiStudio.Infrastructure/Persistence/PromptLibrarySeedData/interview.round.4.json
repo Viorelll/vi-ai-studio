@@ -1,0 +1,31 @@
+{
+  "round": 4,
+  "title": "Rules and invariants",
+  "questions": [
+    {
+      "order": 1,
+      "prompt": "What must never happen? Phrase it as a sentence you'd say out loud.",
+      "defaultHint": "A user must never see another tenant's data."
+    },
+    {
+      "order": 2,
+      "prompt": "What must always be true immediately after a write?",
+      "defaultHint": "The written record is immediately readable by its owner."
+    },
+    {
+      "order": 3,
+      "prompt": "What is allowed to be eventually consistent, and what must be strictly consistent?",
+      "defaultHint": "Search index and notifications may lag; balances and permissions must not."
+    },
+    {
+      "order": 4,
+      "prompt": "Which numbers in your domain are money, and in which currencies?",
+      "defaultHint": "None identified yet."
+    },
+    {
+      "order": 5,
+      "prompt": "What must be recorded permanently even if the underlying record is later deleted?",
+      "defaultHint": "An audit log entry of who did what, and when."
+    }
+  ]
+}

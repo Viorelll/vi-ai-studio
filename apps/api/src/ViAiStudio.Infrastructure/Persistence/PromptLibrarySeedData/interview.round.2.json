@@ -1,0 +1,31 @@
+{
+  "round": 2,
+  "title": "Actors and permissions",
+  "questions": [
+    {
+      "order": 1,
+      "prompt": "Who uses this? List every actor/role.",
+      "defaultHint": "Owner, Admin, Member, Viewer."
+    },
+    {
+      "order": 2,
+      "prompt": "Which actions are dangerous -- irreversible, financial, or exposing other users' data?",
+      "defaultHint": "Delete, billing changes, role changes."
+    },
+    {
+      "order": 3,
+      "prompt": "Who is allowed to perform the dangerous actions above?",
+      "defaultHint": "Owner and Admin only."
+    },
+    {
+      "order": 4,
+      "prompt": "Can one person belong to more than one workspace/organisation and switch between them without re-authenticating?",
+      "defaultHint": "Yes."
+    },
+    {
+      "order": 5,
+      "prompt": "Does an internal operator/support role need to see customer data, and under what conditions?",
+      "defaultHint": "Yes, read-only, with an audit trail entry recorded per access."
+    }
+  ]
+}

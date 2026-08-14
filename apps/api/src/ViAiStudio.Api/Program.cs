@@ -1,8 +1,11 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Amazon.S3;
+using Amazon.S3.Util;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using ViAiStudio.Api.Endpoints;
@@ -14,6 +17,7 @@ using ViAiStudio.Application.Specifications;
 using ViAiStudio.Infrastructure;
 using ViAiStudio.Infrastructure.Auth;
 using ViAiStudio.Infrastructure.Persistence;
+using ViAiStudio.Infrastructure.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -51,11 +55,18 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 builder.Services.AddScoped<CreateSpecificationHandler>();
 builder.Services.AddScoped<UpdateSpecificationBasicsHandler>();
-builder.Services.AddScoped<SaveSpecificationPhaseHandler>();
 builder.Services.AddScoped<SpecGenerationModelResolver>();
-builder.Services.AddScoped<GeneratePhaseTextHandler>();
-builder.Services.AddScoped<GeneratePhaseChipsHandler>();
-builder.Services.AddScoped<FinalizeSpecificationHandler>();
+builder.Services.AddScoped<SyncSpecificationDocumentsHandler>();
+builder.Services.AddScoped<ListChipGroupsHandler>();
+builder.Services.AddScoped<SaveIntakeChipsHandler>();
+builder.Services.AddScoped<ListInterviewRoundsHandler>();
+builder.Services.AddScoped<SaveInterviewRoundHandler>();
+builder.Services.AddScoped<ExpandInterviewAnswerHandler>();
+builder.Services.AddScoped<CompleteIntakeInterviewHandler>();
+builder.Services.AddScoped<StartSpecificationGenerationHandler>();
+builder.Services.AddScoped<RunSpecificationGenerationHandler>();
+builder.Services.AddScoped<ValidateSpecificationDocumentsHandler>();
+builder.Services.AddScoped<RenderSpecificationManifestHandler>();
 builder.Services.AddScoped<DeleteSpecificationHandler>();
 
 builder.Services.AddScoped<StartBuildHandler>();
@@ -97,6 +108,8 @@ app.MapGet("/", () => Results.Redirect("/scalar"));
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapAuthEndpoints();
 app.MapSpecificationsEndpoints();
+app.MapSpecificationIntakeEndpoints();
+app.MapSpecificationGenerationEndpoints();
 app.MapBuildsEndpoints();
 app.MapBuildEventsEndpoints();
 app.MapAdminEndpoints();
@@ -107,6 +120,17 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<ViAiStudioDbContext>();
     await db.Database.MigrateAsync();
     await AuthSeeder.SeedAsync(db);
+    await SpecificationPromptLibrarySeeder.SeedAsync(db);
+
+    // MinIO ships with no buckets pre-created; both this Api (specification
+    // documents) and AI Generator (build archives) write to the same bucket,
+    // so it's bootstrapped once here rather than duplicated in each writer.
+    var s3Client = scope.ServiceProvider.GetRequiredService<IAmazonS3>();
+    var bucketName = scope.ServiceProvider.GetRequiredService<IOptions<MinioStorageOptions>>().Value.BucketName;
+    if (!await AmazonS3Util.DoesS3BucketExistV2Async(s3Client, bucketName))
+    {
+        await s3Client.PutBucketAsync(bucketName);
+    }
 }
 
 app.Run();

@@ -1,0 +1,16 @@
+{
+  "group": "L",
+  "label": "Target environments",
+  "sheetField": "environments",
+  "selectMode": "multi",
+  "options": [
+    { "value": "local Docker Compose", "isDefault": true },
+    { "value": "single-node on-prem", "isDefault": false },
+    { "value": "Kubernetes on-prem", "isDefault": false },
+    { "value": "Azure", "isDefault": true },
+    { "value": "AWS", "isDefault": false },
+    { "value": "GCP", "isDefault": false },
+    { "value": "air-gapped", "isDefault": false }
+  ],
+  "changes": "the whole 04-infrastructure folder and the environment matrix."
+}

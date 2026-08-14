@@ -1,0 +1,19 @@
+{
+  "group": "C",
+  "label": "Deployables",
+  "sheetField": "deployables",
+  "selectMode": "multi",
+  "options": [
+    { "value": "HTTP API", "isDefault": true },
+    { "value": "web SPA", "isDefault": true },
+    { "value": "server-rendered web", "isDefault": false },
+    { "value": "scheduler host", "isDefault": true },
+    { "value": "message worker", "isDefault": true },
+    { "value": "operator admin app", "isDefault": false },
+    { "value": "public API gateway", "isDefault": false },
+    { "value": "mobile client", "isDefault": false },
+    { "value": "desktop client", "isDefault": false },
+    { "value": "CLI", "isDefault": false }
+  ],
+  "changes": "how many folders exist under 03-apps/."
+}

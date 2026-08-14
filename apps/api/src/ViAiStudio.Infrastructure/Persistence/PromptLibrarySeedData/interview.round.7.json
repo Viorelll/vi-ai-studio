@@ -1,0 +1,31 @@
+{
+  "round": 7,
+  "title": "Operations and constraints",
+  "questions": [
+    {
+      "order": 1,
+      "prompt": "Who deploys, and how often?",
+      "defaultHint": "The founding team, on merge to main."
+    },
+    {
+      "order": 2,
+      "prompt": "Who is on call, and how are they alerted?",
+      "defaultHint": "The founding team, via an alerting integration."
+    },
+    {
+      "order": 3,
+      "prompt": "What are your recovery expectations: how much data loss is tolerable (RPO), and how long may an outage last (RTO)?",
+      "defaultHint": "RPO 15 minutes, RTO 4 hours."
+    },
+    {
+      "order": 4,
+      "prompt": "Is any technology mandated or forbidden, and by whom?",
+      "defaultHint": "None."
+    },
+    {
+      "order": 5,
+      "prompt": "Is there a deadline that changes what's worth building now versus later?",
+      "defaultHint": "None stated."
+    }
+  ]
+}

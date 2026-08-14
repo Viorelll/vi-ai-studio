@@ -66,6 +66,17 @@ public sealed class MinioStorageClient(IAmazonS3 s3Client, IOptions<MinioStorage
         return buffer;
     }
 
+    public async Task UploadAsync(string storageKey, Stream content, string contentType, CancellationToken cancellationToken)
+    {
+        await s3Client.PutObjectAsync(new PutObjectRequest
+        {
+            BucketName = options.Value.BucketName,
+            Key = storageKey,
+            InputStream = content,
+            ContentType = contentType,
+        }, cancellationToken);
+    }
+
     // GetPreSignedUrlRequest.Protocol defaults to HTTPS regardless of the
     // client's UseHttp config, which breaks presigned URLs against a
     // plain-HTTP local MinIO -- so it has to be set explicitly on every request.

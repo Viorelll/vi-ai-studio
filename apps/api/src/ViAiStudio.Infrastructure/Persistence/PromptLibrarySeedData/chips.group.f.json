@@ -1,0 +1,14 @@
+{
+  "group": "F",
+  "label": "Primary database",
+  "sheetField": "primaryDatabase",
+  "selectMode": "single",
+  "options": [
+    { "value": "PostgreSQL", "isDefault": true },
+    { "value": "SQL Server", "isDefault": false },
+    { "value": "both (provider-abstracted)", "isDefault": false },
+    { "value": "MySQL", "isDefault": false },
+    { "value": "other", "isDefault": false }
+  ],
+  "changes": "every migration, index and full-text decision."
+}

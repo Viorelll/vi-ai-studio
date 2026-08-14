@@ -1,0 +1,31 @@
+{
+  "round": 6,
+  "title": "External systems",
+  "questions": [
+    {
+      "order": 1,
+      "prompt": "What systems must you send data to, and receive data from?",
+      "defaultHint": "A transactional email provider only."
+    },
+    {
+      "order": 2,
+      "prompt": "Which of those integrations are allowed to be down without blocking your core product?",
+      "defaultHint": "All of them -- core create/read/update/delete must not depend on external systems."
+    },
+    {
+      "order": 3,
+      "prompt": "Do customers need to receive your events (webhooks, exports)?",
+      "defaultHint": "Not in v1."
+    },
+    {
+      "order": 4,
+      "prompt": "Must anything run inside the customer's own network?",
+      "defaultHint": "No."
+    },
+    {
+      "order": 5,
+      "prompt": "Is email, SMS or push required, and who supplies the transport?",
+      "defaultHint": "Email only, via a transactional email provider."
+    }
+  ]
+}

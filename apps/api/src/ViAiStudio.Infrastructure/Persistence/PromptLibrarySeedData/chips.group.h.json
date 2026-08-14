@@ -1,0 +1,16 @@
+{
+  "group": "H",
+  "label": "Frontend",
+  "sheetField": "frontend",
+  "selectMode": "single",
+  "options": [
+    { "value": "React + Vite", "isDefault": true },
+    { "value": "Next.js", "isDefault": false },
+    { "value": "Blazor", "isDefault": false },
+    { "value": "Razor Pages / MVC", "isDefault": false },
+    { "value": "Angular", "isDefault": false },
+    { "value": "Vue", "isDefault": false },
+    { "value": "no UI (API only)", "isDefault": false }
+  ],
+  "changes": "whether 03-apps/frontend exists and what its specs contain."
+}

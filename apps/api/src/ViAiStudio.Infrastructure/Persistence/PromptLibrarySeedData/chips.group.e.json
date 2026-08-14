@@ -1,0 +1,19 @@
+{
+  "group": "E",
+  "label": "Identity features",
+  "sheetField": "identityFeatures",
+  "selectMode": "multi",
+  "options": [
+    { "value": "email + password", "isDefault": true },
+    { "value": "email verification", "isDefault": true },
+    { "value": "password reset", "isDefault": true },
+    { "value": "TOTP MFA", "isDefault": false },
+    { "value": "passkeys / WebAuthn", "isDefault": false },
+    { "value": "social sign-in", "isDefault": false },
+    { "value": "enterprise SSO (SAML/OIDC)", "isDefault": false },
+    { "value": "SCIM provisioning", "isDefault": false },
+    { "value": "machine API keys", "isDefault": false },
+    { "value": "LDAP / AD federation", "isDefault": false }
+  ],
+  "changes": "endpoint count in the auth module, on-prem requirements."
+}

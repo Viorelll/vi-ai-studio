@@ -1,0 +1,18 @@
+{
+  "group": "K",
+  "label": "Compliance and residency",
+  "sheetField": "compliance",
+  "selectMode": "multi",
+  "options": [
+    { "value": "GDPR", "isDefault": true },
+    { "value": "data residency in a named region", "isDefault": false },
+    { "value": "SOC 2", "isDefault": false },
+    { "value": "HIPAA", "isDefault": false },
+    { "value": "PCI via provider", "isDefault": false },
+    { "value": "audit export for auditors", "isDefault": true },
+    { "value": "SIEM forwarding", "isDefault": false },
+    { "value": "accessibility as a legal requirement", "isDefault": false },
+    { "value": "none", "isDefault": false }
+  ],
+  "changes": "the privacy specs, retention jobs, export and erasure paths."
+}

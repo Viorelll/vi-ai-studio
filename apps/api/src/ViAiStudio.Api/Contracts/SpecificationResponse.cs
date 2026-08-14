@@ -1,4 +1,3 @@
-using ViAiStudio.Domain.Catalog;
 using ViAiStudio.Domain.Entities;
 
 namespace ViAiStudio.Api.Contracts;
@@ -57,8 +56,6 @@ public sealed record SpecificationDetailResponse(
     DateTimeOffset Created,
     int Progress,
     TechStackResponse Stack,
-    string? SpecMarkdown,
-    IReadOnlyList<SpecificationPhaseResponse> Phases,
     IReadOnlyList<GenerationSummaryResponse> Generations)
 {
     public static SpecificationDetailResponse FromEntity(Specification specification) => new(
@@ -73,11 +70,5 @@ public sealed record SpecificationDetailResponse(
         specification.CreatedAt,
         specification.Progress,
         TechStackResponse.FromValue(specification.Stack),
-        specification.SpecMarkdown,
-        specification.Phases
-            .Where(p => SpecificationPhaseCatalog.Exists(p.PhaseIndex))
-            .OrderBy(p => p.PhaseIndex)
-            .Select(SpecificationPhaseResponse.FromEntity)
-            .ToList(),
         specification.Generations.OrderByDescending(g => g.Version).Select(GenerationSummaryResponse.FromEntity).ToList());
 }

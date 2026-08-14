@@ -1,0 +1,31 @@
+{
+  "round": 5,
+  "title": "Scale and budgets",
+  "questions": [
+    {
+      "order": 1,
+      "prompt": "Expected tenants/workspaces, and users at peak.",
+      "defaultHint": "Hundreds of tenants, low thousands of users at peak in year one."
+    },
+    {
+      "order": 2,
+      "prompt": "The size of the largest single tenant you expect within a year.",
+      "defaultHint": "A few hundred users, tens of thousands of records."
+    },
+    {
+      "order": 3,
+      "prompt": "Which single screen or endpoint will be hit hardest?",
+      "defaultHint": "The main list/dashboard view."
+    },
+    {
+      "order": 4,
+      "prompt": "What does \"too slow\" mean to you, as a number (e.g. p95 latency)?",
+      "defaultHint": "p95 under 300 ms for reads."
+    },
+    {
+      "order": 5,
+      "prompt": "What volume of files, if any, will be uploaded -- and how long must data be retained, and by whose rule?",
+      "defaultHint": "Modest file volume; active data retained indefinitely, soft-deleted data purged after 30 days."
+    }
+  ]
+}

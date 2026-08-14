@@ -1,6 +1,6 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { CircleAlertIcon, FolderIcon, Trash2Icon } from "lucide-react";
+import { CircleAlertIcon, FileIcon, FolderIcon, Trash2Icon } from "lucide-react";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { DownloadButton } from "@/components/download-button";
 import { FileTree } from "@/components/file-tree";
@@ -8,6 +8,8 @@ import { PageLoading } from "@/components/page-loading";
 import { NotFoundView } from "@/components/not-found-view";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Spinner } from "@/components/ui/spinner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -20,19 +22,85 @@ import {
   AlertDialogMedia,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useDeleteSpecification, useSpecification } from "@/hooks/use-specifications";
-import { SPEC_DOC_PATHS } from "@/lib/spec-doc-paths";
+import {
+  useDeleteSpecification,
+  useSpecification,
+  useSpecificationDocument,
+  useSpecificationDocuments,
+} from "@/hooks/use-specifications";
 import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import { getStatusBadgeClassName, getStatusLabel } from "@/lib/status";
 import { cn } from "@/lib/utils";
 
+function pickDefaultPath(paths: string[]): string | null {
+  return (
+    paths.find((path) => path.toLowerCase().endsWith("overview.md")) ??
+    paths[0] ??
+    null
+  );
+}
+
+function SpecFileContentPreview({
+  specId,
+  path,
+}: {
+  specId: string;
+  path: string | null;
+}) {
+  const fileQuery = useSpecificationDocument(specId, path);
+
+  if (!path) {
+    return (
+      <div className="flex flex-1 items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
+        <FileIcon className="size-4" />
+        Select a file to preview
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <CardHeader className="flex items-center gap-2 rounded-none border-b bg-[#fafafa] px-5 py-3 text-xs font-semibold text-muted-foreground">
+        <FileIcon className="size-3.5" />
+        <span className="font-mono">{path}</span>
+      </CardHeader>
+      <ScrollArea className="min-h-0 flex-1">
+        {fileQuery.isPending && (
+          <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+            <Spinner />
+            Loading…
+          </div>
+        )}
+        {fileQuery.isError && (
+          <div className="p-6 text-sm text-destructive">
+            {fileQuery.error instanceof ApiError
+              ? fileQuery.error.message
+              : "Couldn't load this file."}
+          </div>
+        )}
+        {fileQuery.data && (
+          <pre className="p-5 text-[12.5px] font-mono leading-relaxed whitespace-pre-wrap text-foreground/80">
+            {fileQuery.data.content}
+          </pre>
+        )}
+      </ScrollArea>
+    </>
+  );
+}
+
 export function SpecificationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const specQuery = useSpecification(id);
+  const documentsQuery = useSpecificationDocuments(id);
   const deleteSpecification = useDeleteSpecification();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (documentsQuery.data) setSelectedPath(pickDefaultPath(documentsQuery.data));
+  }, [documentsQuery.data]);
 
   if (specQuery.isPending) return <PageLoading />;
   if (specQuery.isError) {
@@ -56,12 +124,13 @@ export function SpecificationDetailPage() {
     spec.stack.database,
     spec.stack.infra,
   ];
-  const canEdit = spec.status === "draft";
+  const canEdit = spec.status === "draft" || spec.status === "building" || spec.status === "failed";
+  const generationReady = spec.status === "ready";
   const latestGeneration = spec.generations[0]; // API orders these newest-first
 
   return (
     <main className="flex-1 flex justify-center px-7 py-10">
-      <div className="flex h-[calc(100vh-3.5rem-5rem)] w-full max-w-[820px] flex-col">
+      <div className="flex w-full max-w-275 flex-col pb-10">
         <PageBreadcrumb
           items={[
             { label: "Project Specifications", href: "/specifications" },
@@ -110,18 +179,6 @@ export function SpecificationDetailPage() {
         </div>
 
         <Card className="rounded-[12px] p-6 gap-5 mb-5 shrink-0">
-          <Section title="Description">
-            <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
-              {spec.description || "No description yet."}
-            </p>
-          </Section>
-
-          <Section title="Requirements & features">
-            <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
-              {spec.features || "No requirements captured yet."}
-            </p>
-          </Section>
-
           <Section title="Tech stack">
             <div className="flex gap-1.5 flex-wrap">
               {stackChips.map((tech) => (
@@ -133,13 +190,16 @@ export function SpecificationDetailPage() {
           </Section>
         </Card>
 
-        <Card className="flex min-h-0 flex-1 flex-col rounded-[12px] p-0 overflow-hidden">
-          <CardHeader className="flex items-center justify-between gap-2 rounded-none border-b bg-[#fafafa] px-5 py-3 text-xs font-semibold text-muted-foreground">
-            <span className="flex items-center gap-2">
+        <div className="flex flex-col gap-2">
+          <div className="flex shrink-0 items-center justify-between gap-2">
+            <span className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
               <FolderIcon className="size-3.5" />
               Specifications (.md)
               <span className="font-normal">
-                · {SPEC_DOC_PATHS.length} files
+                ·{" "}
+                {documentsQuery.data
+                  ? `${documentsQuery.data.length} files`
+                  : "…"}
               </span>
             </span>
             <DownloadButton
@@ -148,21 +208,50 @@ export function SpecificationDetailPage() {
               variant="outline"
               size="sm"
             />
-          </CardHeader>
-          <FileTree
-            paths={SPEC_DOC_PATHS}
-            bordered={false}
-            className="min-h-0 flex-1"
-          />
-        </Card>
+          </div>
+
+          {/* Sized to show ~20 files at once (row height ~33px) without scrolling the whole page inside a cramped box. */}
+          <div className="grid h-175 grid-cols-[280px_1fr] gap-4">
+            <Card className="flex min-h-0 flex-col rounded-[12px] p-0 overflow-hidden">
+              {documentsQuery.isPending && (
+                <div className="flex items-center gap-2 p-5 text-sm text-muted-foreground">
+                  <Spinner />
+                  Loading files…
+                </div>
+              )}
+              {documentsQuery.isError && (
+                <div className="p-5 text-sm text-destructive">
+                  Couldn't load the file list.
+                </div>
+              )}
+              {documentsQuery.data && (
+                <FileTree
+                  paths={documentsQuery.data}
+                  bordered={false}
+                  className="min-h-0 flex-1"
+                  selectedPath={selectedPath}
+                  onSelectFile={setSelectedPath}
+                />
+              )}
+            </Card>
+
+            <Card className="flex min-h-0 flex-col rounded-[12px] p-0 overflow-hidden">
+              <SpecFileContentPreview specId={spec.id} path={selectedPath} />
+            </Card>
+          </div>
+        </div>
 
         <div className="flex shrink-0 justify-end mt-6">
           {canEdit && (
             <Link to={`/studio/${spec.id}`} className={cn(buttonVariants())}>
-              Continue in Studio
+              {spec.status === "building"
+                ? "View generation progress"
+                : spec.status === "failed"
+                  ? "Retry generation"
+                  : "Continue in Studio"}
             </Link>
           )}
-          {!canEdit && !latestGeneration && (
+          {generationReady && !latestGeneration && (
             <Link
               to={`/specifications/${spec.id}/launch`}
               className={cn(buttonVariants())}
@@ -170,7 +259,7 @@ export function SpecificationDetailPage() {
               Start AI Build
             </Link>
           )}
-          {!canEdit && latestGeneration?.status === "ready" && (
+          {generationReady && latestGeneration?.status === "ready" && (
             <Link
               to={`/specifications/${spec.id}/launch`}
               className={cn(buttonVariants())}
@@ -178,7 +267,7 @@ export function SpecificationDetailPage() {
               Rebuild
             </Link>
           )}
-          {!canEdit && latestGeneration?.status === "failed" && (
+          {generationReady && latestGeneration?.status === "failed" && (
             <Link
               to={`/specifications/${spec.id}/launch`}
               className={cn(buttonVariants())}
@@ -186,7 +275,7 @@ export function SpecificationDetailPage() {
               Retry AI Build
             </Link>
           )}
-          {!canEdit && latestGeneration?.status === "running" && (
+          {generationReady && latestGeneration?.status === "running" && (
             <Link
               to={`/build/${spec.id}?generation=${latestGeneration.id}`}
               className={cn(buttonVariants())}

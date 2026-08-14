@@ -17,6 +17,25 @@ export function useSpecification(id: string | undefined) {
   });
 }
 
+export function useSpecificationDocuments(id: string | undefined) {
+  return useQuery({
+    queryKey: ["specifications", id, "documents"],
+    queryFn: () => apiClient.get<string[]>(`/api/specifications/${id}/documents`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useSpecificationDocument(id: string | undefined, path: string | null) {
+  return useQuery({
+    queryKey: ["specifications", id, "documents", path],
+    queryFn: () =>
+      apiClient.get<{ path: string; content: string }>(
+        `/api/specifications/${id}/documents/content?path=${encodeURIComponent(path!)}`,
+      ),
+    enabled: Boolean(id) && Boolean(path),
+  });
+}
+
 export function useCreateSpecification() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -40,53 +59,11 @@ export function useUpdateSpecificationBasics(id: string) {
   });
 }
 
-export function useSaveSpecificationPhase(specId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { phaseIndex: number; checkedItems: string[]; selectedKeywords: string[] }) =>
-      apiClient.put(`/api/specifications/${specId}/phases/${input.phaseIndex}`, {
-        checkedItems: input.checkedItems,
-        selectedKeywords: input.selectedKeywords,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["specifications", specId] });
-    },
-  });
-}
-
-export function useGeneratePhaseText(specId: string) {
-  return useMutation({
-    mutationFn: (phaseIndex: number) =>
-      apiClient.post<{ generatedText: string | null }>(`/api/specifications/${specId}/phases/${phaseIndex}/generate`),
-  });
-}
-
-export function useGeneratePhaseChips(specId: string) {
-  return useMutation({
-    mutationFn: ({ phaseIndex, stepName }: { phaseIndex: number; stepName: string }) =>
-      apiClient.post<{ chips: string[] }>(
-        `/api/specifications/${specId}/phases/${phaseIndex}/chips`,
-        { stepName },
-      ),
-  });
-}
-
 export function useDeleteSpecification() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiClient.delete(`/api/specifications/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["specifications"] });
-    },
-  });
-}
-
-export function useFinalizeSpecification(specId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () => apiClient.post<SpecificationDetail>(`/api/specifications/${specId}/finalize`),
-    onSuccess: (data) => {
-      queryClient.setQueryData(["specifications", specId], data);
       queryClient.invalidateQueries({ queryKey: ["specifications"] });
     },
   });

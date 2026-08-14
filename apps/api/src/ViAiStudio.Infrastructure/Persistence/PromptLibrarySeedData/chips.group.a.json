@@ -1,0 +1,15 @@
+{
+  "group": "A",
+  "label": "Product shape",
+  "sheetField": "productShape",
+  "selectMode": "single",
+  "options": [
+    { "value": "internal tool", "isDefault": false },
+    { "value": "B2B SaaS", "isDefault": true },
+    { "value": "B2C app", "isDefault": false },
+    { "value": "marketplace", "isDefault": false },
+    { "value": "API-first product", "isDefault": false },
+    { "value": "on-prem enterprise product", "isDefault": false }
+  ],
+  "changes": "tenancy, billing, onboarding, admin surfaces."
+}

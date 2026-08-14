@@ -1,0 +1,18 @@
+{
+  "group": "I",
+  "label": "Frontend requirements",
+  "sheetField": "frontendRequirements",
+  "selectMode": "multi",
+  "options": [
+    { "value": "dark mode", "isDefault": true },
+    { "value": "responsive", "isDefault": true },
+    { "value": "WCAG 2.2 AA", "isDefault": true },
+    { "value": "multi-language", "isDefault": false },
+    { "value": "right-to-left", "isDefault": false },
+    { "value": "white-labelling per tenant", "isDefault": false },
+    { "value": "real-time updates", "isDefault": false },
+    { "value": "offline support", "isDefault": false },
+    { "value": "print / PDF views", "isDefault": false }
+  ],
+  "changes": "design tokens, theming, i18n and accessibility specs."
+}

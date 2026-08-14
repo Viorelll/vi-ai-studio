@@ -1,0 +1,12 @@
+{
+  "group": "O",
+  "label": "Team and cadence",
+  "sheetField": "team",
+  "selectMode": "single",
+  "options": [
+    { "value": "solo + coding agent", "isDefault": true },
+    { "value": "2-5 developers", "isDefault": false },
+    { "value": "multiple teams", "isDefault": false }
+  ],
+  "changes": "module boundaries, review rules, branching in the delivery specs."
+}

@@ -1,0 +1,12 @@
+{
+  "group": "M",
+  "label": "Rigour dial",
+  "sheetField": "rigour",
+  "selectMode": "single",
+  "options": [
+    { "value": "prototype", "isDefault": false },
+    { "value": "production-ready", "isDefault": true },
+    { "value": "regulated", "isDefault": false }
+  ],
+  "changes": "how strict the quality, security and DR specs are. Prototype drops load budgets and DR; regulated adds residency, immutable audit and formal sign-off."
+}

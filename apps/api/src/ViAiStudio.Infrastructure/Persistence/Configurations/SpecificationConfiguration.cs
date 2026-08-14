@@ -21,14 +21,33 @@ public sealed class SpecificationConfiguration : IEntityTypeConfiguration<Specif
             stack.Property(t => t.UiStyle).HasColumnName("stack_ui_style").HasMaxLength(50);
         });
 
-        builder.HasMany(s => s.Phases)
-            .WithOne()
-            .HasForeignKey(p => p.SpecificationId)
-            .OnDelete(DeleteBehavior.Cascade);
+        builder.Property(s => s.DocumentPaths)
+            .HasConversion(JsonStringListConverter.Converter, JsonStringListConverter.Comparer)
+            .HasColumnType("jsonb");
 
         builder.HasMany(s => s.Generations)
             .WithOne()
             .HasForeignKey(g => g.SpecificationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(s => s.Intake)
+            .WithOne()
+            .HasForeignKey<SpecificationIntakeSheet>(i => i.SpecificationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(s => s.InterviewAnswers)
+            .WithOne()
+            .HasForeignKey(a => a.SpecificationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(s => s.Documents)
+            .WithOne()
+            .HasForeignKey(d => d.SpecificationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(s => s.GenerationRuns)
+            .WithOne()
+            .HasForeignKey(r => r.SpecificationId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

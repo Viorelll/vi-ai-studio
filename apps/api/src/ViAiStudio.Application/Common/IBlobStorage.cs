@@ -18,4 +18,7 @@ public interface IBlobStorage
 
     /// <summary>Reads an object's full contents into memory (used to peek inside a stored zip archive).</summary>
     Task<Stream> DownloadAsync(string storageKey, CancellationToken cancellationToken);
+
+    /// <summary>Writes an object directly (used by the Api itself for artifacts it renders server-side, e.g. specification documents -- unlike generated project archives, which AI Generator writes on its own).</summary>
+    Task UploadAsync(string storageKey, Stream content, string contentType, CancellationToken cancellationToken);
 }

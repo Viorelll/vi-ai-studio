@@ -41,16 +41,6 @@ export interface SpecificationSummary {
   latestGenerationStatus: GenerationStatus | null;
 }
 
-export interface SpecificationPhase {
-  phaseIndex: number;
-  title: string;
-  items: string[];
-  output: string;
-  checkedItems: string[];
-  selectedKeywords: string[];
-  generatedText: string | null;
-}
-
 export interface GenerationSummary {
   id: string;
   specificationId: string;
@@ -75,16 +65,98 @@ export interface SpecificationDetail {
   created: string;
   progress: number;
   stack: TechStack;
-  specMarkdown: string | null;
-  phases: SpecificationPhase[];
   generations: GenerationSummary[];
 }
 
-export interface SpecificationPhaseDefinition {
-  index: number;
+// --- Specification authoring pipeline: stage 1 (chips) and stage 2 (interview) ---
+
+export interface ChipOption {
+  value: string;
+  isDefault: boolean;
+}
+
+export interface ChipGroup {
+  group: string;
+  label: string;
+  sheetField: string;
+  selectMode: "single" | "multi";
+  options: ChipOption[];
+  changes: string;
+}
+
+export interface IntakeSheet {
+  productShape: string;
+  tenantIsolation: string;
+  deployables: string[];
+  identityModel: string;
+  identityFeatures: string[];
+  primaryDatabase: string;
+  supportingInfrastructure: string[];
+  frontend: string;
+  frontendRequirements: string[];
+  functionalAreas: string[];
+  compliance: string[];
+  environments: string[];
+  rigour: string;
+  specScope: string;
+  team: string;
+  impliedDecisions: string[];
+  conflictsResolved: string[];
+  stillUnknown: string[];
+  completedAt: string | null;
+  interviewCompletedAt: string | null;
+}
+
+export interface InterviewQuestion {
+  order: number;
+  prompt: string;
+  defaultHint: string;
+}
+
+export interface InterviewRound {
+  round: number;
   title: string;
-  items: string[];
-  output: string;
+  questions: InterviewQuestion[];
+}
+
+export interface InterviewAnswer {
+  roundIndex: number;
+  questionIndex: number;
+  questionText: string;
+  defaultHint: string;
+  answerText: string | null;
+  usedDefault: boolean;
+}
+
+// --- Specification authoring pipeline: stage 3 (batch generation) ---
+
+export type SpecificationGenerationRunStatus = "pending" | "running" | "ready" | "failed";
+export type SpecificationGenerationBatchStatus = "pending" | "running" | "ready" | "skipped" | "failed";
+
+export interface SpecificationGenerationBatch {
+  batchIndex: number;
+  name: string;
+  status: SpecificationGenerationBatchStatus;
+  filesWritten: number;
+  note: string;
+}
+
+export interface SpecificationGenerationRun {
+  id: string;
+  status: SpecificationGenerationRunStatus;
+  model: string;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  durationSeconds: number | null;
+  batches: SpecificationGenerationBatch[];
+}
+
+export interface ValidationIssue {
+  severity: "warning" | "error";
+  code: string;
+  message: string;
+  documentPath: string | null;
 }
 
 export interface AiModelConfig {
