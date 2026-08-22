@@ -17,13 +17,24 @@ import { clearAuth } from "@/api/auth-token";
 import { cn } from "@/lib/utils";
 import type { BuildEvent } from "@/lib/types";
 
+// Must match the stage labels BuildOrchestrator emits. The orchestrator sends
+// the detail of each step in the log line and only these five as the stage, so
+// the timeline always tracks a stage it recognises -- an unknown label would
+// silently leave it parked on the previous one for the rest of the build.
 const STEPS = [
-  { label: "Planning", sub: "Analyzing specification" },
-  { label: "Scaffolding", sub: "Setting up the project" },
-  { label: "Coding", sub: "Generating implementation" },
-  { label: "Tests", sub: "Verifying correctness" },
+  { label: "Planning", sub: "Reading the specification" },
+  { label: "Generating", sub: "Implementing each phase" },
+  { label: "Coverage", sub: "Checking every spec is built" },
+  { label: "Verifying", sub: "Compile, test and boot" },
   { label: "Done", sub: "Build complete" },
 ];
+
+function colorFor(line: string): string {
+  if (line.includes("✓")) return "#4ade80";
+  if (/\bfailed\b|FAILED/.test(line)) return "#f87171";
+  if (line.startsWith("  •") || line.startsWith("  ")) return "#71717a";
+  return "#a1a1aa";
+}
 
 interface LogLine {
   text: string;
@@ -78,10 +89,7 @@ export function BuildProgress({ generationId }: { generationId: string }) {
             setProgressPct(data.progressPct);
             setLogs((previousLogs) => [
               ...previousLogs,
-              {
-                text: data.logLine,
-                color: data.logLine.includes("✓") ? "#4ade80" : "#a1a1aa",
-              },
+              { text: data.logLine, color: colorFor(data.logLine) },
             ]);
             const stepIndex = STEPS.findIndex(
               (step) => step.label === data.stepLabel,
@@ -184,7 +192,13 @@ export function BuildProgress({ generationId }: { generationId: string }) {
                 <div className="text-zinc-500">Waiting for build to start…</div>
               )}
               {logs.map((line, i) => (
-                <div key={i} style={{ color: line.color }}>
+                // Phase plans and coverage gaps are indented to show nesting,
+                // which collapses without pre-wrap.
+                <div
+                  key={i}
+                  className="whitespace-pre-wrap"
+                  style={{ color: line.color }}
+                >
                   {line.text}
                 </div>
               ))}

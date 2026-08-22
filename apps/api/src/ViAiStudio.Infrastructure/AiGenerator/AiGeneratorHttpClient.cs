@@ -16,7 +16,9 @@ public sealed class AiGeneratorHttpClient(HttpClient httpClient, IConfiguration 
     private sealed record GenerateTextResponseBody(string Text, int TokensIn, int TokensOut);
 
     private sealed record StackBody(string Backend, string Ui, string Database, string Infra, string UiStyle);
-    private sealed record SpecDocumentBody(string Path, string Content);
+    private sealed record SpecDocumentBody(
+        string Path, string Content, string SpecId, string Title, string Component,
+        IReadOnlyList<string> DependsOn, IReadOnlyList<string> Provides, IReadOnlyList<string> Generates);
     private sealed record StartBuildRequestBody(
         Guid GenerationId, string Provider, string Model, string BaseUrl, string ApiKey,
         string SpecificationName, string Summary, string Description, string Audience, string Features,
@@ -56,7 +58,10 @@ public sealed class AiGeneratorHttpClient(HttpClient httpClient, IConfiguration 
                 specification.Name, specification.Summary, specification.Description, specification.Audience,
                 specification.Features, specification.SpecMarkdown,
                 new StackBody(stack.Backend, stack.Ui, stack.Database, stack.Infra, stack.UiStyle),
-                specification.Documents.Select(d => new SpecDocumentBody(d.Path, d.Content)).ToList(),
+                specification.Documents
+                    .Select(d => new SpecDocumentBody(
+                        d.Path, d.Content, d.SpecId, d.Title, d.Component, d.DependsOn, d.Provides, d.Generates))
+                    .ToList(),
                 callbackBaseUrl),
             JsonOptions,
             cancellationToken);

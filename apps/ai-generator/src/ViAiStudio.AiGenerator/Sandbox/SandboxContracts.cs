@@ -58,6 +58,24 @@ public sealed class SandboxOptions
     public int MaxRepairAttempts { get; set; } = 4;
 
     /// <summary>
+    /// How many times the whole verification pipeline is re-run after a step
+    /// exhausted its repair budget. Each round starts every step again with a
+    /// fresh budget, against the files the previous round left behind -- a
+    /// build that is close but not finished usually gets there on a second or
+    /// third pass, and giving up after one is what makes a build look like it
+    /// "stopped on fail".
+    /// </summary>
+    public int MaxBuildRounds { get; set; } = 3;
+
+    /// <summary>
+    /// How many times a single generation phase is retried when the model's
+    /// reply cannot be used at all -- a truncated or unparseable JSON body,
+    /// or an empty file list. Large phases hit this occasionally, and one bad
+    /// reply must not cost the whole build.
+    /// </summary>
+    public int MaxPhaseAttempts { get; set; } = 3;
+
+    /// <summary>
     /// How many times to retry a step directly -- no model call, no repair
     /// attempt spent -- when it failed for an infrastructure reason rather
     /// than a code reason. Kept small: a real outage should surface, not be
@@ -67,6 +85,23 @@ public sealed class SandboxOptions
 
     /// <summary>Delay between infra retries, to give a transient blip a chance to clear.</summary>
     public TimeSpan InfraRetryDelay { get; set; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// How many times to hand the model the specifications that the coverage
+    /// check found no implementation for. Each round costs one model call, and
+    /// the loop also stops early once a round stops closing gaps.
+    /// </summary>
+    public int MaxCoverageAttempts { get; set; } = 3;
+
+    /// <summary>
+    /// The share of specifications that must be implemented for a build to be
+    /// called done. The gap-filling loop always pushes for 100%; this floor is
+    /// what it is *judged* against, and sits below 100 deliberately -- coverage
+    /// is measured by structural evidence, so a specification whose vocabulary
+    /// simply doesn't survive into code should not be able to fail a project
+    /// that is otherwise complete, compiles, passes its tests and boots.
+    /// </summary>
+    public int MinimumSpecCoveragePct { get; set; } = 90;
 
     /// <summary>
     /// Named Docker volume that caches the NuGet global-packages folder across

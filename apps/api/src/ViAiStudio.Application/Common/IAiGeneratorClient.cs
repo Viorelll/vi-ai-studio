@@ -14,8 +14,22 @@ public sealed record GeneratedText(string Text, int TokensIn, int TokensOut);
 
 public sealed record BuildDispatchResult(string JobId);
 
-/// <summary>One rendered specification markdown file (see SpecificationDocumentSet).</summary>
-public sealed record BuildSpecificationDocument(string Path, string Content);
+/// <summary>
+/// One authored specification file, carrying the structured front-matter the
+/// Api already stores as columns on <see cref="SpecificationDocument"/>. AI
+/// Generator plans its build phases, orders them and measures spec coverage
+/// from these fields, so sending only the markdown would force it to re-parse
+/// YAML to rediscover what is already known here.
+/// </summary>
+public sealed record BuildSpecificationDocument(
+    string Path,
+    string Content,
+    string SpecId,
+    string Title,
+    string Component,
+    IReadOnlyList<string> DependsOn,
+    IReadOnlyList<string> Provides,
+    IReadOnlyList<string> Generates);
 
 /// <summary>
 /// Everything AI Generator needs to know about *what* to build: the authored

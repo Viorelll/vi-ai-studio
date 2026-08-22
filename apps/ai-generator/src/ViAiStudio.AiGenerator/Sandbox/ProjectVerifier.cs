@@ -23,14 +23,22 @@ public sealed class ProjectVerifier(ISandboxExecutor sandbox, IOptions<SandboxOp
 
     public static readonly VerificationStep BackendBuild = new("Backend build", "Compiling the backend…");
     public static readonly VerificationStep FrontendBuild = new("Frontend build", "Compiling the frontend…");
+    public static readonly VerificationStep AutomatedTests = new("Automated tests", "Running the generated test suite…");
     public static readonly VerificationStep IntegrationRun = new("Integration run", "Booting the stack against a database…");
 
+    /// <summary>
+    /// The always-run steps. <see cref="AutomatedTests"/> is deliberately not
+    /// here: it only makes sense when the specification actually asked for
+    /// tests, so the orchestrator adds it based on the build plan rather than
+    /// failing every project whose specification never mentioned testing.
+    /// </summary>
     public IReadOnlyList<VerificationStep> Steps => [BackendBuild, FrontendBuild, IntegrationRun];
 
     public Task<SandboxRunResult> RunAsync(VerificationStep step, string workspaceHostPath, CancellationToken cancellationToken)
     {
         if (step == BackendBuild) return RunBackendBuildAsync(workspaceHostPath, cancellationToken);
         if (step == FrontendBuild) return RunFrontendBuildAsync(workspaceHostPath, cancellationToken);
+        if (step == AutomatedTests) return RunTestsAsync(workspaceHostPath, cancellationToken);
         if (step == IntegrationRun) return RunIntegrationAsync(workspaceHostPath, cancellationToken);
         throw new ArgumentOutOfRangeException(nameof(step), step.Name, "Unknown verification step.");
     }
@@ -78,6 +86,47 @@ public sealed class ProjectVerifier(ISandboxExecutor sandbox, IOptions<SandboxOp
             // needs no extra npm config.
             AdditionalBinds: [$"{options.NpmCacheVolume}:{NpmCacheMountPath}"]),
             cancellationToken);
+
+    /// <summary>
+    /// Runs the tests the generation phase wrote for the specification's
+    /// acceptance criteria. A database sidecar is on the network and its
+    /// connection string is in the environment, so tests that exercise real
+    /// persistence work rather than forcing every generated test to be a pure
+    /// unit test.
+    /// </summary>
+    private async Task<SandboxRunResult> RunTestsAsync(string workspaceHostPath, CancellationToken cancellationToken)
+    {
+        await using var network = await sandbox.CreateNetworkAsync(cancellationToken);
+
+        await network.StartServiceAsync(
+            options.DatabaseImage,
+            DatabaseAlias,
+            new Dictionary<string, string>
+            {
+                ["POSTGRES_DB"] = DatabaseName,
+                ["POSTGRES_USER"] = DatabaseUser,
+                ["POSTGRES_PASSWORD"] = DatabasePassword,
+            },
+            cancellationToken);
+
+        return await sandbox.RunAsync(new SandboxRun(
+            options.BackendImage,
+            TestScript,
+            workspaceHostPath,
+            ProjectLayout.BackendDirectory,
+            new Dictionary<string, string>
+            {
+                ["DOTNET_NOLOGO"] = "1",
+                ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1",
+                ["NUGET_PACKAGES"] = NugetCacheMountPath,
+                [ProjectLayout.ConnectionStringEnvVar] =
+                    $"Host={DatabaseAlias};Port=5432;Database={DatabaseName};Username={DatabaseUser};Password={DatabasePassword}",
+                ["ASPNETCORE_ENVIRONMENT"] = "Development",
+            },
+            network.Name,
+            AdditionalBinds: [$"{options.NugetCacheVolume}:{NugetCacheMountPath}"]),
+            cancellationToken);
+    }
 
     /// <summary>
     /// The real stop condition: a Postgres container comes up on a private
@@ -197,6 +246,40 @@ public sealed class ProjectVerifier(ISandboxExecutor sandbox, IOptions<SandboxOp
           exit 1
         fi
         echo 'SMOKE_CHECK_PASSED'
+        """;
+
+    /// <summary>
+    /// Discovers the generated test projects and runs each one. A project is a
+    /// test project when it references the test SDK -- naming conventions vary
+    /// too much between generated solutions to rely on. Running each project
+    /// separately (rather than the whole solution) keeps the failure output
+    /// attributable to a specific suite, which is what the repair prompt needs.
+    /// </summary>
+    private static readonly string TestScript = """
+        set -e
+        echo '----- discovering test projects -----'
+        test_projects=$(grep -rl 'Microsoft.NET.Test.Sdk' --include='*.csproj' . || true)
+        if [ -z "$test_projects" ]; then
+          echo 'TEST_CHECK_FAILED: the specification calls for automated tests, but no project referencing'
+          echo 'Microsoft.NET.Test.Sdk exists. Add a test project under backend/ that dotnet test discovers,'
+          echo 'covering the acceptance criteria in the endpoint, entity and backend specifications.'
+          exit 1
+        fi
+        echo "$test_projects"
+        dotnet restore
+        echo 'Waiting for the database to accept connections…'
+        sleep 10
+        failed=0
+        for project in $test_projects; do
+          echo "----- dotnet test $project -----"
+          dotnet test "$project" --nologo --verbosity normal || failed=1
+        done
+        if [ "$failed" != "0" ]; then
+          echo 'TEST_CHECK_FAILED: one or more generated tests failed. Fix the implementation the test'
+          echo 'exercises, or the test if it contradicts its specification.'
+          exit 1
+        fi
+        echo 'TEST_CHECK_PASSED'
         """;
 
     /// <summary>

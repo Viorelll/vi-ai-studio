@@ -86,12 +86,13 @@ public sealed class StartBuildHandler(
     /// <summary>
     /// The complete brief handed to AI Generator: the authored basics plus the
     /// full set of generated specification documents (see
-    /// SpecificationDocument), so the model generating the project sees
-    /// everything the authoring pipeline produced. AI Generator's
-    /// ProjectCodeGenerator still concatenates a top-level `SpecMarkdown`
-    /// blob into its own prompt alongside the per-document contracts; since
-    /// the authoring pipeline no longer renders one flattened blob, the name
-    /// and summary stand in for it here.
+    /// SpecificationDocument) *with* their front-matter as structured fields.
+    /// AI Generator groups these into build phases and checks coverage against
+    /// them once the project is generated, so the ids, components and
+    /// dependency edges matter as much as the markdown itself. The top-level
+    /// `SpecMarkdown` blob is only a heading now -- the authoring pipeline no
+    /// longer renders one flattened document, so the name and summary stand in
+    /// for it and the per-document contracts carry the real content.
     /// </summary>
     private static BuildSpecification BuildSpecificationFor(
         Specification specification, IReadOnlyList<Domain.Entities.SpecificationDocument> documents) => new(
@@ -102,5 +103,6 @@ public sealed class StartBuildHandler(
         specification.Features,
         $"{specification.Name}\n\n{specification.Summary}",
         specification.Stack,
-        documents.Select(d => new BuildSpecificationDocument(d.Path, d.Content)).ToList());
+        documents.Select(d => new BuildSpecificationDocument(
+            d.Path, d.Content, d.SpecId, d.Title, d.Component, d.DependsOn, d.Provides, d.Generates)).ToList());
 }
