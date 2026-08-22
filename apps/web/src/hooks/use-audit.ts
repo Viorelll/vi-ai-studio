@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import type { AiCallLogDetail, AiCallLogRollup, AiCallLogSummary } from "@/lib/types";
 
@@ -28,8 +28,10 @@ export function useAuditLogs(specId: string | undefined, scope: AuditScope) {
   });
 }
 
-export function useAuditLogDetail() {
-  return useMutation({
-    mutationFn: (logId: string) => apiClient.get<AiCallLogDetail>(`/api/admin/audit/logs/${logId}`),
+export function useAuditLog(logId: string | undefined) {
+  return useQuery({
+    queryKey: ["auditLog", logId],
+    queryFn: () => apiClient.get<AiCallLogDetail>(`/api/admin/audit/logs/${logId}`),
+    enabled: Boolean(logId),
   });
 }

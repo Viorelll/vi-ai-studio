@@ -17,7 +17,7 @@ import {
   TimelineItem,
   TimelineRail,
 } from "@/components/ui/timeline";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatDuration } from "@/lib/format";
 import { getStatusBadgeClassName, getStatusLabel } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import type {
@@ -73,6 +73,9 @@ export function GeneratedProjectCard({
                       </div>
                       <div className="mt-0.5 text-[11.5px] text-[#a1a1aa]">
                         Latest: {formatDateTime(latest.created)}
+                        {latest.durationSeconds != null && (
+                          <> · {formatDuration(latest.durationSeconds)}</>
+                        )}
                       </div>
                     </div>
                     <Badge
@@ -134,7 +137,9 @@ export function GeneratedProjectCard({
                         {gen.durationSeconds != null && (
                           <>
                             <span>·</span>
-                            <span>Build time {gen.durationSeconds}s</span>
+                            <span>
+                              Build time {formatDuration(gen.durationSeconds)}
+                            </span>
                           </>
                         )}
                       </div>

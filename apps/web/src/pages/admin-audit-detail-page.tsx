@@ -82,7 +82,7 @@ export function AdminAuditDetailPage() {
           />
         </div>
 
-        <AuditLogTable logs={logs} />
+        <AuditLogTable logs={logs} basePath={`/admin/audit/${mode}/${id}`} />
       </div>
     </main>
   );

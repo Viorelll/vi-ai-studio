@@ -13,6 +13,7 @@ import { AdminAiConfigPage } from "@/pages/admin-ai-config-page";
 import { AdminAuditHomePage } from "@/pages/admin-audit-home-page";
 import { AdminAuditListPage } from "@/pages/admin-audit-list-page";
 import { AdminAuditDetailPage } from "@/pages/admin-audit-detail-page";
+import { AdminAuditLogDetailPage } from "@/pages/admin-audit-log-detail-page";
 import { NotFoundView } from "@/components/not-found-view";
 import { LoginPage } from "@/pages/login-page";
 import { useAuthStore } from "@/store/auth-store";
@@ -48,6 +49,10 @@ export function App() {
         <Route
           path="admin/audit/:mode/:id"
           element={<AdminAuditDetailPage />}
+        />
+        <Route
+          path="admin/audit/:mode/:id/logs/:logId"
+          element={<AdminAuditLogDetailPage />}
         />
         <Route path="*" element={<NotFoundView />} />
       </Route>
